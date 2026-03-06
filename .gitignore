@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+.env.local
+ui/node_modules
+ui/.next
+ui/out
