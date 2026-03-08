@@ -10,6 +10,18 @@
   "toolsPath": "./ui/src/lib/ai/tools/index.ts",
   "dataDir": "~/.dev/data/",
 
+  "configFields": [
+    { "key": "defaultCategories", "label": "Default Audit Categories", "type": "multiselect", "group": "General", "options": ["performance", "seo", "accessibility", "best-practices"], "defaultValue": ["performance", "seo", "accessibility", "best-practices"] },
+    { "key": "crawlMaxPages", "label": "Crawl Max Pages", "type": "slider", "group": "General", "min": 1, "max": 200, "step": 10, "defaultValue": 50 },
+    { "key": "crawlRateLimit", "label": "Crawl Rate Limit (ms)", "type": "slider", "group": "General", "min": 100, "max": 5000, "step": 100, "defaultValue": 1000 },
+    { "key": "respectRobotsTxt", "label": "Respect robots.txt", "type": "boolean", "group": "General", "defaultValue": true }
+  ],
+
+  "credentials": [
+    { "key": "anthropicApiKey", "label": "Claude API Key", "env": "ANTHROPIC_API_KEY" },
+    { "key": "googleApiKey", "label": "Google API Key", "env": "GOOGLE_API_KEY" }
+  ],
+
   "events": [
     {
       "name": "audit_complete",
