@@ -12,6 +12,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { allTools } from "../../ui/src/lib/ai/tools/index.js";
+import { soshiEvents } from '../events/emitter.js';
 
 const server = new McpServer({
   name: "dev",
@@ -33,6 +34,11 @@ for (const [name, t] of Object.entries(allTools)) {
     }
   );
 }
+
+// Bridge soshi events to MCP notifications
+soshiEvents.subscribe((eventName, data) => {
+  server.server.notification({ method: 'notifications/event', params: { event: eventName, data } });
+});
 
 async function main() {
   const transport = new StdioServerTransport();

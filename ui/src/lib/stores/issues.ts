@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getDataDir } from "./paths";
+import { soshiEvents } from '../../../../src/events/emitter.js';
 
 export type IssueStatus = "open" | "in-progress" | "closed";
 export type IssuePriority = "low" | "medium" | "high" | "critical";
@@ -68,6 +69,7 @@ export async function createIssue(data: {
   };
   items.push(issue);
   await saveAll(items);
+  soshiEvents.emit('issue_created', { issueId: issue.id, title: issue.title, status: issue.status, priority: issue.priority, projectId: issue.projectId ?? '' });
   return issue;
 }
 
