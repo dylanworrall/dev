@@ -9,10 +9,14 @@ async function fetchWithStatus(url: string, maxRedirects = 5): Promise<{ finalUr
   let currentUrl = url;
 
   for (let i = 0; i < maxRedirects; i++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     const resp = await fetch(currentUrl, {
       redirect: "manual",
       headers: { "User-Agent": "DevClient-Crawler/1.0", Accept: "text/html" },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     if (resp.status >= 300 && resp.status < 400) {
       redirectChain.push(currentUrl);
@@ -187,11 +191,15 @@ export const crawlTools = {
 
       for (const link of uniqueLinks.slice(0, 50)) {
         try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 15000);
           const resp = await fetch(link.href, {
             method: "HEAD",
             headers: { "User-Agent": "DevClient-LinkChecker/1.0" },
             redirect: "follow",
+            signal: controller.signal,
           });
+          clearTimeout(timeout);
           if (resp.status >= 400) {
             broken.push({
               url: link.href,
@@ -239,10 +247,14 @@ export const crawlTools = {
         }
         seen.add(currentUrl);
 
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
         const resp = await fetch(currentUrl, {
           redirect: "manual",
           headers: { "User-Agent": "DevClient-RedirectChecker/1.0" },
+          signal: controller.signal,
         });
+        clearTimeout(timeout);
 
         chain.push({ url: currentUrl, status: resp.status });
 
@@ -286,9 +298,13 @@ export const crawlTools = {
         visited.add(normalized);
 
         try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 15000);
           const resp = await fetch(currentUrl, {
             headers: { "User-Agent": "DevClient-Sitemap/1.0", Accept: "text/html" },
+            signal: controller.signal,
           });
+          clearTimeout(timeout);
           if (!resp.ok) continue;
 
           urls.push(normalized);

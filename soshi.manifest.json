@@ -1,0 +1,154 @@
+{
+  "id": "dev",
+  "name": "Coding",
+  "icon": "code",
+  "color": "#64D2FF",
+  "description": "AI-powered web development toolkit: Lighthouse audits, SEO analysis, site crawling, deployment management, and issue tracking",
+  "configSchema": "./src/config/schema.ts",
+  "defaults": "./src/config/defaults.ts",
+  "mcpServer": "./src/mcp/server.ts",
+  "toolsPath": "./ui/src/lib/ai/tools/index.ts",
+  "dataDir": "~/.dev/data/",
+
+  "configFields": [
+    { "key": "defaultCategories", "label": "Default Audit Categories", "type": "multiselect", "group": "General", "options": ["performance", "seo", "accessibility", "best-practices"], "defaultValue": ["performance", "seo", "accessibility", "best-practices"] },
+    { "key": "crawlMaxPages", "label": "Crawl Max Pages", "type": "slider", "group": "General", "min": 1, "max": 200, "step": 10, "defaultValue": 50 },
+    { "key": "crawlRateLimit", "label": "Crawl Rate Limit (ms)", "type": "slider", "group": "General", "min": 100, "max": 5000, "step": 100, "defaultValue": 1000 },
+    { "key": "respectRobotsTxt", "label": "Respect robots.txt", "type": "boolean", "group": "General", "defaultValue": true }
+  ],
+
+  "credentials": [
+    { "key": "anthropicApiKey", "label": "Claude API Key", "env": "ANTHROPIC_API_KEY" },
+    { "key": "googleApiKey", "label": "Google API Key", "env": "GOOGLE_API_KEY" }
+  ],
+
+  "events": [
+    {
+      "name": "audit_complete",
+      "description": "A Lighthouse or SEO audit finished",
+      "schema": {
+        "url": "string",
+        "auditType": "string",
+        "score": "number",
+        "projectId": "string"
+      }
+    },
+    {
+      "name": "deploy_triggered",
+      "description": "A deployment was triggered for a project",
+      "schema": {
+        "deploymentId": "string",
+        "projectId": "string",
+        "environment": "string",
+        "status": "string"
+      }
+    },
+    {
+      "name": "crawl_complete",
+      "description": "A site crawl finished discovering pages",
+      "schema": {
+        "url": "string",
+        "pageCount": "number",
+        "brokenLinks": "number",
+        "projectId": "string"
+      }
+    },
+    {
+      "name": "issue_created",
+      "description": "A new issue or ticket was created",
+      "schema": {
+        "issueId": "string",
+        "title": "string",
+        "status": "string",
+        "priority": "string",
+        "projectId": "string"
+      }
+    },
+    {
+      "name": "deploy_failed",
+      "description": "A deployment failed",
+      "schema": {
+        "deploymentId": "string",
+        "projectId": "string",
+        "environment": "string",
+        "error": "string"
+      }
+    }
+  ],
+
+  "actions": [
+    {
+      "name": "run_lighthouse",
+      "description": "Run a full Lighthouse audit via PageSpeed Insights",
+      "tool": "run_lighthouse",
+      "params": {
+        "url": "string",
+        "projectId?": "string"
+      }
+    },
+    {
+      "name": "trigger_deploy",
+      "description": "Trigger a new deployment for a project",
+      "tool": "trigger_deploy",
+      "params": {
+        "projectId": "string",
+        "environment?": "string",
+        "branch?": "string"
+      }
+    },
+    {
+      "name": "crawl_site",
+      "description": "Crawl a site to discover pages, check status codes and links",
+      "tool": "crawl_site",
+      "params": {
+        "url": "string",
+        "maxPages?": "number",
+        "projectId?": "string"
+      }
+    },
+    {
+      "name": "analyze_seo",
+      "description": "Full SEO analysis including meta tags, OG, headings, and structured data",
+      "tool": "analyze_seo",
+      "params": {
+        "url": "string"
+      }
+    },
+    {
+      "name": "create_issue",
+      "description": "Create a new issue or ticket in a project",
+      "tool": "create_issue",
+      "params": {
+        "title": "string",
+        "description?": "string",
+        "projectId?": "string",
+        "priority?": "string",
+        "labels?": "string[]"
+      }
+    },
+    {
+      "name": "find_broken_links",
+      "description": "Check every link on a page for 404s and timeouts",
+      "tool": "find_broken_links",
+      "params": {
+        "url": "string"
+      }
+    }
+  ],
+
+  "routerKeywords": [
+    "audit", "audits",
+    "deploy", "deployment", "deployments",
+    "lighthouse", "pagespeed",
+    "crawl", "crawling", "spider",
+    "repo", "repos", "repository",
+    "issue", "issues", "ticket", "bug",
+    "seo", "meta", "headings",
+    "site", "website",
+    "performance", "vitals", "lcp", "cls",
+    "build", "builds",
+    "broken", "links", "404",
+    "sitemap", "robots",
+    "branch", "commit", "pr"
+  ]
+}

@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getDataDir } from "./paths";
+import { soshiEvents } from '../../../../src/events/emitter.js';
 
 export type DeployEnvironment = "production" | "staging" | "preview" | "dev";
 export type DeployStatus = "building" | "deploying" | "live" | "failed" | "rolled-back";
@@ -56,6 +57,7 @@ export async function createDeployment(data: {
   };
   items.push(deployment);
   await saveAll(items);
+  soshiEvents.emit('deploy_triggered', { deploymentId: deployment.id, projectId: deployment.projectId, environment: deployment.environment, status: deployment.status });
   return deployment;
 }
 
@@ -78,6 +80,10 @@ export async function updateDeployment(id: string, updates: Partial<Omit<Deploym
   if (idx === -1) return undefined;
   items[idx] = { ...items[idx], ...updates, updatedAt: new Date().toISOString() };
   await saveAll(items);
+  const updated = items[idx];
+  if (updates.status === 'failed') {
+    soshiEvents.emit('deploy_failed', { deploymentId: id, projectId: updated.projectId, environment: updated.environment, error: updates.failureReason ?? 'Unknown error' });
+  }
   return items[idx];
 }
 

@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getDataDir } from "./paths";
+import { soshiEvents } from '../../../../src/events/emitter.js';
 
 export interface CrawledPage {
   url: string;
@@ -61,6 +62,7 @@ export async function addCrawl(data: Omit<SiteCrawl, "id" | "timestamp">): Promi
   };
   items.unshift(crawl);
   await saveAll(items);
+  soshiEvents.emit('crawl_complete', { url: crawl.rootUrl, pageCount: crawl.totalPages ?? crawl.pages?.length ?? 0, brokenLinks: crawl.brokenLinks?.length ?? 0, projectId: crawl.projectId ?? '' });
   return crawl;
 }
 

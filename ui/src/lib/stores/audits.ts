@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getDataDir } from "./paths";
+import { soshiEvents } from '../../../../src/events/emitter.js';
 
 export interface AuditScores {
   performance: number;
@@ -59,6 +60,7 @@ export async function addAudit(data: Omit<AuditResult, "id" | "timestamp">): Pro
   };
   items.unshift(audit);
   await saveAll(items);
+  soshiEvents.emit('audit_complete', { url: audit.url, auditType: audit.source ?? 'lighthouse', score: audit.scores?.performance ?? 0, projectId: audit.projectId ?? '' });
   return audit;
 }
 
