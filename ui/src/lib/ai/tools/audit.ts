@@ -15,7 +15,11 @@ async function fetchPageSpeed(url: string, categories: string[]) {
 
   const resp = await fetch(`${PAGESPEED_API}?${params}`);
   if (!resp.ok) throw new Error(`PageSpeed API error: ${resp.status} ${resp.statusText}`);
-  return resp.json();
+  try {
+    return await resp.json();
+  } catch {
+    throw new Error(`PageSpeed API returned invalid JSON for ${url}`);
+  }
 }
 
 function extractScores(data: Record<string, unknown>): { performance: number; seo: number; accessibility: number; bestPractices: number } {
