@@ -19,6 +19,7 @@ import { agentLoopTools } from "./agent-loop";
 import { openTools } from "./open";
 import { screenshotTools } from "./screenshot";
 import { scaffoldTools } from "./scaffold";
+import { spawnAgentTools } from "./spawn-agent";
 
 export const allTools = {
   // Auditing & SEO
@@ -53,4 +54,5 @@ export const allTools = {
   ...openTools,
   ...screenshotTools,
   ...scaffoldTools,
+  ...spawnAgentTools,
 };

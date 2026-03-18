@@ -15,7 +15,7 @@ const TOOL_SETS: Record<string, string[]> = {
   chat: [], // No tools — just conversation
   ask: ["ask_user"], // Just asking questions
   plan: ["ask_user", "plan", "mark_complete", "create_project"],
-  build: ["read_file", "write_file", "edit_file", "run_command", "start_server", "find_port", "scaffold_project", "take_screenshot", "open_browser"],
+  build: ["spawn_claude", "spawn_codex", "read_file", "list_directory", "run_command", "start_server", "find_port", "scaffold_project", "take_screenshot", "open_browser", "create_project", "resume_project", "update_plan"],
   git: ["git_status", "git_diff", "git_commit", "git_push", "git_init"],
   github: ["create_pr", "review_pr", "list_issues", "create_issue"],
   memory: ["remember", "recall", "resume_project"],
