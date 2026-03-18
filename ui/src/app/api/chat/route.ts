@@ -7,6 +7,9 @@ import { getOrCreateCache } from "@/lib/gemini-cache";
 import { getConvexClient, isConvexMode } from "@/lib/convex-server";
 import { api } from "@/lib/convex-api";
 
+// Track rate-limited models so we don't waste requests
+const rateLimitedUntil: Record<string, number> = {};
+
 // ── Minimal tool sets — send as few tools as possible ──
 const TOOL_SETS: Record<string, string[]> = {
   chat: [], // No tools — just conversation
@@ -177,25 +180,10 @@ export async function POST(req: Request) {
     const modelName = fallbackChain[i];
     const isLast = i === fallbackChain.length - 1;
 
-    // Quick availability ping (skip for last resort)
-    if (!isLast) {
-      try {
-        const ping = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${googleApiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "." }] }], generationConfig: { maxOutputTokens: 1 } }),
-            signal: AbortSignal.timeout(4000),
-          }
-        );
-        if (ping.status === 429 || ping.status === 503) {
-          console.log(`[Chat] ${modelName} unavailable (${ping.status}), skipping`);
-          continue;
-        }
-      } catch {
-        continue;
-      }
+    // Check if model is known to be rate-limited (avoid wasting requests on ping checks)
+    if (!isLast && rateLimitedUntil[modelName] && rateLimitedUntil[modelName] > Date.now()) {
+      console.log(`[Chat] ${modelName} rate-limited for ${Math.round((rateLimitedUntil[modelName] - Date.now()) / 60000)}min, skipping`);
+      continue;
     }
 
     try {
@@ -207,8 +195,21 @@ export async function POST(req: Request) {
         maxRetries: 0,
         onError: (error) => {
           const msg = String((error as { error?: unknown }).error || error);
-          if (msg.includes("429") || msg.includes("503") || msg.includes("exhausted")) {
-            console.log(`[Chat] ${modelName} rate limited`);
+          if (msg.includes("429") || msg.includes("exhausted") || msg.includes("quota")) {
+            // Parse retry delay if available
+            const retryMatch = msg.match(/retry in (\d+)h?(\d+)?m?(\d+)?s/i);
+            let retryMs = 60_000; // default 1 min
+            if (retryMatch) {
+              const h = parseInt(retryMatch[1]) || 0;
+              const m = parseInt(retryMatch[2]) || 0;
+              const s = parseInt(retryMatch[3]) || 0;
+              retryMs = (h * 3600 + m * 60 + s) * 1000;
+            }
+            rateLimitedUntil[modelName] = Date.now() + retryMs;
+            console.log(`[Chat] ${modelName} rate limited for ${Math.round(retryMs / 60000)}min`);
+          } else if (msg.includes("503") || msg.includes("UNAVAILABLE")) {
+            rateLimitedUntil[modelName] = Date.now() + 30_000; // 30s for server errors
+            console.log(`[Chat] ${modelName} unavailable`);
           } else {
             console.error(`[Chat ${modelName}]`, msg.slice(0, 200));
           }

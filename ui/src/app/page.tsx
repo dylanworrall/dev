@@ -24,29 +24,59 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 
-const MODELS = [
-  { id: "gemini-2.5-flash-lite", label: "Flash Lite", desc: "Fast, free tier friendly" },
-  { id: "gemini-2.5-flash", label: "Flash", desc: "Balanced speed & quality" },
-  { id: "gemini-3.1-pro-preview", label: "3.1 Pro", desc: "Best quality, higher quota usage" },
-];
+interface ModelInfo {
+  id: string;
+  label: string;
+  status?: "available" | "limited" | "unavailable";
+  retryIn?: string;
+  dailyLimit?: number;
+}
 
 function ModelPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [models, setModels] = useState<ModelInfo[]>([
+    { id: "gemini-2.5-flash-lite", label: "Flash Lite" },
+    { id: "gemini-2.5-flash", label: "Flash" },
+    { id: "gemini-3.1-pro-preview", label: "3.1 Pro" },
+  ]);
+
+  // Check model status periodically
+  useEffect(() => {
+    const check = () => {
+      fetch("/api/models").then(r => r.json()).then(data => {
+        if (data.models) setModels(data.models);
+      }).catch(() => {});
+    };
+    check();
+    const interval = setInterval(check, 60_000); // Check every minute
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="flex items-center gap-1 bg-muted/30 rounded-full p-0.5">
-      {MODELS.map((m) => (
-        <button
-          key={m.id}
-          onClick={() => onChange(m.id)}
-          title={m.desc}
-          className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${
-            value === m.id
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {m.label}
-        </button>
-      ))}
+      {models.map((m) => {
+        const isLimited = m.status === "limited";
+        const isUnavailable = m.status === "unavailable";
+        const isActive = value === m.id;
+        return (
+          <button
+            key={m.id}
+            onClick={() => !isLimited && onChange(m.id)}
+            title={isLimited ? `Rate limited — retry in ${m.retryIn}` : isUnavailable ? "Unavailable" : m.label}
+            disabled={isLimited}
+            className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all flex items-center gap-1 ${
+              isActive
+                ? "bg-background text-foreground shadow-sm"
+                : isLimited
+                  ? "text-red-400/50 cursor-not-allowed"
+                  : "text-muted-foreground hover:text-foreground cursor-pointer"
+            }`}
+          >
+            {isLimited && <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />}
+            {m.status === "available" && !isActive && <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />}
+            {m.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
