@@ -5,68 +5,84 @@ import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { loadDevEnv } from "@/lib/env";
 import { getConvexClient, isConvexMode } from "@/lib/convex-server";
 import { api } from "@/lib/convex-api";
-import { shouldCompact, compactMessages } from "@/lib/compaction";
 
-// Tool groups — select relevant tools based on conversation
-const TOOL_GROUPS: Record<string, string[]> = {
-  core: ["ask_user", "plan", "mark_complete", "remember", "recall"],
-  build: [
-    "read_file", "write_file", "edit_file", "list_directory",
-    "run_command", "start_server", "find_port", "open_browser",
-    "scaffold_project", "take_screenshot", "create_project", "resume_project",
-    "update_plan",
-  ],
-  code: ["run_code", "verify", "check_port", "serve_file", "search_files", "search_content"],
-  git: ["git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_checkout", "git_push", "git_pull", "git_init"],
-  github: ["get_pr", "list_prs", "create_pr", "review_pr", "merge_pr", "list_issues", "create_issue", "update_issue", "close_issue", "add_comment", "get_diff", "list_commits", "search_code", "get_file_content", "list_repos", "get_repo", "add_repo", "create_github_repo", "list_branches"],
-  deploy: ["list_deployments", "get_deployment", "trigger_deploy", "get_deploy_logs", "rollback", "list_sites", "vercel_list_projects", "vercel_deploy", "fly_list_apps", "fly_deploy", "deployment_platforms", "deploy_and_audit", "full_pipeline"],
-  audit: ["run_lighthouse", "get_pagespeed", "check_core_web_vitals", "analyze_seo", "check_meta_tags", "check_headings", "check_schema_markup", "analyze_content_seo", "check_readability", "suggest_keywords", "crawl_site", "find_broken_links", "check_redirects", "generate_sitemap", "audit_and_create_issues"],
-  misc: ["web_search", "web_fetch", "get_settings", "configure_integration", "list_projects", "get_project", "create_space", "list_spaces", "get_space", "read_memory", "update_memory", "get_preferences", "update_preferences", "reflect"],
+// ── Minimal tool sets — send as few tools as possible ──
+const TOOL_SETS: Record<string, string[]> = {
+  chat: [], // No tools — just conversation
+  ask: ["ask_user"], // Just asking questions
+  plan: ["ask_user", "plan", "mark_complete", "create_project"],
+  build: ["read_file", "write_file", "edit_file", "run_command", "start_server", "find_port", "scaffold_project", "take_screenshot", "open_browser"],
+  git: ["git_status", "git_diff", "git_commit", "git_push", "git_init"],
+  github: ["create_pr", "review_pr", "list_issues", "create_issue"],
+  memory: ["remember", "recall", "resume_project"],
 };
 
-const GROUP_TRIGGERS: Record<string, RegExp> = {
-  build: /\b(build|create|make|scaffold|app|website|site|project|portfolio|landing|page|component|design|redesign|update|fix|edit|change|modify|write|add|implement|develop|continue|resume|finish)\b/i,
-  code: /\b(code|run|test|install|npm|node|python|typescript|verify|lint|serve)\b/i,
-  git: /\b(git|commit|branch|push|pull|stash|checkout|merge|diff|init)\b/i,
-  github: /\b(github|pr|pull request|issue|review|repo|repository)\b/i,
-  deploy: /\b(deploy|netlify|vercel|fly\.io|rollback|pipeline|ship|launch|release|hosting)\b/i,
-  audit: /\b(audit|seo|lighthouse|pagespeed|crawl|broken link|sitemap|accessibility)\b/i,
-  misc: /\b(search|settings|config|memory|preference|space|workspace|web)\b/i,
-};
+const INTENT_PATTERNS: Array<{ pattern: RegExp; sets: string[] }> = [
+  { pattern: /^(hi|hello|hey|sup|yo|what's up|how are you|thanks|thank you|ok|okay|cool|nice|great|got it)\b/i, sets: ["chat"] },
+  { pattern: /\b(build|create|make|scaffold|app|website|site|project|portfolio|landing)\b/i, sets: ["plan", "build", "memory"] },
+  { pattern: /\b(fix|edit|change|modify|update|redesign|improve|add|remove|replace)\b/i, sets: ["build"] },
+  { pattern: /\b(run|install|npm|node|start|serve|test|lint)\b/i, sets: ["build"] },
+  { pattern: /\b(commit|push|pull|branch|merge|git|diff)\b/i, sets: ["build", "git"] },
+  { pattern: /\b(pr|pull request|issue|review|github|repo)\b/i, sets: ["build", "github"] },
+  { pattern: /\b(deploy|netlify|vercel|fly|ship|launch)\b/i, sets: ["build"] },
+  { pattern: /\b(remember|recall|resume|continue|pick up)\b/i, sets: ["build", "memory"] },
+  { pattern: /\b(search|find|look|web|fetch|browse)\b/i, sets: ["build"] },
+];
 
-function selectTools(messages: unknown[]): typeof allTools | null {
-  const selected = new Set(TOOL_GROUPS.core);
-
+function selectMinimalTools(messages: unknown[]): Record<string, unknown> | null {
   const recentText = (messages as Array<{ role: string; content: unknown }>)
-    .slice(-4)
+    .slice(-3)
     .map((m) => typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.map((p: { text?: string }) => p.text || "").join(" ") : "")
     .join(" ");
 
-  let triggered = false;
-  for (const [group, trigger] of Object.entries(GROUP_TRIGGERS)) {
-    if (trigger.test(recentText)) {
-      triggered = true;
-      for (const name of TOOL_GROUPS[group]) selected.add(name);
+  // Check if any tools were used recently — keep those sets active
+  const usedTools = new Set<string>();
+  for (const msg of (messages as Array<{ role: string; parts?: Array<{ type?: string }> }>).slice(-4)) {
+    if (msg.parts) {
+      for (const p of msg.parts) {
+        if (p.type && String(p.type).startsWith("tool-")) {
+          // Tool was used, we need build tools
+          usedTools.add("build");
+        }
+      }
     }
   }
 
-  // No triggers = just chatting, don't send any tools (saves tokens)
-  if (!triggered) return null;
+  const activeSets = new Set<string>(usedTools);
+
+  for (const { pattern, sets } of INTENT_PATTERNS) {
+    if (pattern.test(recentText)) {
+      for (const s of sets) activeSets.add(s);
+    }
+  }
+
+  // If only "chat" intent, return null (no tools)
+  if (activeSets.size === 0 || (activeSets.size === 1 && activeSets.has("chat"))) {
+    return null;
+  }
+
+  const toolNames = new Set<string>();
+  for (const setName of activeSets) {
+    for (const name of TOOL_SETS[setName] || []) {
+      toolNames.add(name);
+    }
+  }
 
   return Object.fromEntries(
-    Object.entries(allTools).filter(([name]) => selected.has(name))
-  ) as typeof allTools;
+    Object.entries(allTools).filter(([name]) => toolNames.has(name))
+  );
 }
 
-// Cache system prompt
+// ── System prompt cache ──
 let cachedPrompt: { text: string; ts: number } | null = null;
 async function getSystemPrompt(): Promise<string> {
-  if (cachedPrompt && Date.now() - cachedPrompt.ts < 60_000) return cachedPrompt.text;
+  if (cachedPrompt && Date.now() - cachedPrompt.ts < 120_000) return cachedPrompt.text;
   const text = await buildSystemPrompt();
   cachedPrompt = { text, ts: Date.now() };
   return text;
 }
 
+// ── Main handler ──
 export async function POST(req: Request) {
   loadDevEnv(true);
 
@@ -76,7 +92,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "No messages provided" }, { status: 400 });
   }
 
-  // Credits check
+  // Credits
   const userEmail = body.userEmail as string | undefined;
   if (isConvexMode() && userEmail) {
     const convex = getConvexClient();
@@ -95,38 +111,32 @@ export async function POST(req: Request) {
   const google = createGoogleGenerativeAI({ apiKey: googleApiKey });
   const systemPrompt = await getSystemPrompt();
 
-  // AGGRESSIVE context management to prevent quota exhaustion
-  // 1. Keep only last 8 messages
-  let finalMessages = messages.length > 8 ? messages.slice(-8) : messages;
+  // ── AGGRESSIVE context management ──
+  // 1. Keep only last 6 messages
+  let finalMessages = messages.slice(-6);
 
-  // 2. Strip ALL tool outputs — the model doesn't need to see old tool results
-  //    It only needs the text parts to understand conversation flow
+  // 2. Strip tool outputs completely — model reads files fresh when needed
   finalMessages = finalMessages.map((m: Record<string, unknown>) => {
     if (m.role === "assistant" && Array.isArray(m.parts)) {
       return {
         ...m,
         parts: (m.parts as Array<Record<string, unknown>>).map((p) => {
           if (p.type && String(p.type).startsWith("tool-")) {
-            // Keep tool name and a tiny summary, strip the full output
-            const output = p.output as Record<string, unknown> | undefined;
-            const message = output?.message || "done";
-            return { ...p, output: { message } };
+            return { ...p, output: { done: true } };
           }
-          // Truncate long text parts too
-          if (p.type === "text" && typeof p.text === "string" && (p.text as string).length > 2000) {
-            return { ...p, text: (p.text as string).slice(-2000) };
+          if (p.type === "text" && typeof p.text === "string" && (p.text as string).length > 1500) {
+            return { ...p, text: (p.text as string).slice(-1500) };
           }
           return p;
         }),
       };
     }
-    // Truncate long user messages
     if (m.role === "user" && Array.isArray(m.parts)) {
       return {
         ...m,
         parts: (m.parts as Array<Record<string, unknown>>).map((p) => {
-          if (p.type === "text" && typeof p.text === "string" && (p.text as string).length > 1000) {
-            return { ...p, text: (p.text as string).slice(-1000) };
+          if (p.type === "text" && typeof p.text === "string" && (p.text as string).length > 800) {
+            return { ...p, text: (p.text as string).slice(-800) };
           }
           return p;
         }),
@@ -137,73 +147,78 @@ export async function POST(req: Request) {
 
   const modelMessages = await convertToModelMessages(finalMessages);
 
-  // Step limiting
+  // ── Step limiting ──
   const hasToolResults = messages.some((m: { role: string; parts?: Array<{ type: string }> }) =>
     m.role === "assistant" && m.parts?.some((p: { type: string }) => p.type?.startsWith("tool-"))
   );
   const isFirstFewMessages = messages.filter((m: { role: string }) => m.role === "user").length <= 1;
-  const maxSteps = (isFirstFewMessages && !hasToolResults) ? 2 : 25;
+  const maxSteps = (isFirstFewMessages && !hasToolResults) ? 2 : 20;
 
-  // Model selection: cookie > env var > default
+  // ── Model selection with fallback ──
   const allowedModels = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3.1-pro-preview"];
   const cookieModel = req.headers.get("cookie")?.split(";").map(c => c.trim()).find(c => c.startsWith("dev-model="))?.split("=")[1];
-  const modelName = (cookieModel && allowedModels.includes(cookieModel))
+  const primaryModel = (cookieModel && allowedModels.includes(cookieModel))
     ? cookieModel
     : process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
-  const selectedTools = selectTools(modelMessages);
-  const hasTools = selectedTools && Object.keys(selectedTools).length > 0;
 
-  // Model fallback chain — if selected model fails, try lighter ones
-  const fallbackChain = modelName === "gemini-3.1-pro-preview"
+  const fallbackChain = primaryModel === "gemini-3.1-pro-preview"
     ? ["gemini-3.1-pro-preview", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
-    : modelName === "gemini-2.5-flash"
+    : primaryModel === "gemini-2.5-flash"
       ? ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
       : ["gemini-2.5-flash-lite"];
 
-  // Test the first model with a quick ping before streaming
+  // ── Select minimal tools ──
+  const selectedTools = selectMinimalTools(modelMessages);
+  const hasTools = selectedTools && Object.keys(selectedTools).length > 0;
+
+  // ── Try each model in fallback chain ──
   for (let i = 0; i < fallbackChain.length; i++) {
-    const tryModel = fallbackChain[i];
+    const modelName = fallbackChain[i];
     const isLast = i === fallbackChain.length - 1;
 
-    // Quick availability check (skip for last fallback — just try it)
+    // Quick availability ping (skip for last resort)
     if (!isLast) {
       try {
-        const testRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${tryModel}:generateContent?key=${googleApiKey}`,
+        const ping = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${googleApiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ok" }] }], generationConfig: { maxOutputTokens: 1 } }),
-            signal: AbortSignal.timeout(5000),
+            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "." }] }], generationConfig: { maxOutputTokens: 1 } }),
+            signal: AbortSignal.timeout(4000),
           }
         );
-        if (testRes.status === 429 || testRes.status === 503) {
-          console.log(`[Chat] ${tryModel} unavailable (${testRes.status}), trying next`);
+        if (ping.status === 429 || ping.status === 503) {
+          console.log(`[Chat] ${modelName} unavailable (${ping.status}), skipping`);
           continue;
         }
       } catch {
-        console.log(`[Chat] ${tryModel} ping failed, trying next`);
         continue;
       }
     }
 
     try {
       const result = streamText({
-        model: google(tryModel),
+        model: google(modelName),
         system: systemPrompt,
         messages: modelMessages,
-        ...(hasTools ? { tools: selectedTools, stopWhen: stepCountIs(maxSteps) } : {}),
+        ...(hasTools ? { tools: selectedTools as typeof allTools, stopWhen: stepCountIs(maxSteps) } : {}),
         maxRetries: 0,
-        onError: (error) => console.error(`[Chat ${tryModel}]`, error),
+        onError: (error) => {
+          const msg = String((error as { error?: unknown }).error || error);
+          if (msg.includes("429") || msg.includes("503") || msg.includes("exhausted")) {
+            console.log(`[Chat] ${modelName} rate limited during stream`);
+          } else {
+            console.error(`[Chat ${modelName}]`, msg.slice(0, 200));
+          }
+        },
       });
       return result.toUIMessageStreamResponse();
-    } catch (error) {
-      console.log(`[Chat] ${tryModel} stream failed`);
-      if (isLast) {
-        return Response.json({ error: "All models unavailable. Wait a minute and try again." }, { status: 429 });
-      }
+    } catch {
+      if (isLast) break;
+      console.log(`[Chat] ${modelName} failed, trying next`);
     }
   }
 
-  return Response.json({ error: "No models available" }, { status: 429 });
+  return Response.json({ error: "All models busy. Wait 30 seconds and try again." }, { status: 429 });
 }
