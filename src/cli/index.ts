@@ -4,6 +4,7 @@ import { initCommand } from "./commands/init.js";
 import { loginCommand } from "./commands/login.js";
 import { configCommand } from "./commands/config.js";
 import { uiCommand } from "./commands/ui.js";
+import { chatCommand } from "./commands/chat.js";
 import { setVerbose } from "../utils/logger.js";
 import { printBanner } from "./banner.js";
 
@@ -23,6 +24,7 @@ program.addCommand(initCommand);
 program.addCommand(loginCommand);
 program.addCommand(configCommand);
 program.addCommand(uiCommand);
+program.addCommand(chatCommand);
 
 if (process.argv.length <= 2) {
   printBanner();
