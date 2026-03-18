@@ -56,16 +56,41 @@ export const bashTools = {
   }),
 
   check_port: tool({
-    description: "Check if a server is running and responding on a port.",
+    description: "Check if a server is running on a port and identify which project it is.",
     inputSchema: z.object({
       port: z.number().describe("Port to check"),
     }),
     execute: async ({ port }) => {
       const up = await checkPort(port, 1, 0);
+
+      // Try to identify the project by fetching the page title
+      let title = "";
+      let projectDir = "";
+      if (up) {
+        try {
+          const res = await fetch(`http://localhost:${port}`, { signal: AbortSignal.timeout(3000) });
+          const html = await res.text();
+          title = html.match(/<title>(.*?)<\/title>/)?.[1] || "";
+        } catch {}
+
+        // Try to find the project directory from the PID
+        try {
+          const { executeShell } = await import("@/lib/executor");
+          const netstat = await executeShell(`netstat -ano | findstr LISTENING | findstr :${port}`, { timeout: 5000 });
+          const pid = netstat.stdout.trim().split(/\s+/).pop();
+          if (pid) {
+            const wmic = await executeShell(`powershell -Command "(Get-Process -Id ${pid}).Path"`, { timeout: 5000 });
+            projectDir = wmic.stdout.trim();
+          }
+        } catch {}
+      }
+
       return {
-        message: up ? `Port ${port} is responding` : `Port ${port} is not responding`,
+        message: up ? `Port ${port}: ${title || "running"}` : `Port ${port}: not responding`,
         port,
         responding: up,
+        title: title || undefined,
+        projectDir: projectDir || undefined,
         url: up ? `http://localhost:${port}` : null,
       };
     },
