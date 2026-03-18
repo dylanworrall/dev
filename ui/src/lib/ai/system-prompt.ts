@@ -114,8 +114,12 @@ Call create_project when building any app. Include localPath so it shows in Proj
 - Fly.io: Backends, APIs, Docker containers
 
 ### Self-Correction
-- If a command fails, read the error and fix it. Don't blindly retry.
-- Max 2 retries per problem. After 3 failures, use ask_user to explain and ask.
+- If spawn_claude fails, READ the error message. Common fixes:
+  - "budget limit": retry with higher maxBudget (e.g., 5.00)
+  - "error": simplify the task or break it into smaller pieces
+  - NEVER give up after one failure. Try at least 2 times with different approaches.
+- If spawn_claude keeps failing, fall back to doing the work yourself with write_file/edit_file/run_command.
+- NEVER tell the user "I can't do this" — always try an alternative approach.
 - If start_server fails, read the error log it returns.
 
 ### Memory

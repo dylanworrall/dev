@@ -34,11 +34,19 @@ export const spawnAgentTools = {
         let stdout = "";
         let stderr = "";
 
-        const proc = spawn("claude", args, {
+        // Use full path to claude and ensure PATH is set
+        const claudePath = process.platform === "win32"
+          ? `${process.env.USERPROFILE}\\.local\\bin\\claude`
+          : "claude";
+
+        const proc = spawn(claudePath, args, {
           cwd: workDir,
           shell: true,
           stdio: ["ignore", "pipe", "pipe"],
-          env: { ...process.env },
+          env: {
+            ...process.env,
+            PATH: `${process.env.USERPROFILE}\\.local\\bin;${process.env.PATH}`,
+          },
         });
 
         const timeout = setTimeout(() => {
@@ -64,22 +72,46 @@ export const spawnAgentTools = {
           // Parse Claude Code's JSON output
           try {
             const result = JSON.parse(stdout) as {
+              type?: string;
+              subtype?: string;
               result?: string;
+              is_error?: boolean;
               cost_usd?: number;
+              total_cost_usd?: number;
               duration_ms?: number;
               num_turns?: number;
               session_id?: string;
+              errors?: string[];
             };
 
-            resolvePromise({
-              message: `Claude Code completed (${result.num_turns || "?"} turns, $${result.cost_usd?.toFixed(4) || "?"})`,
-              result: result.result?.slice(0, 3000) || "No output",
-              cost: result.cost_usd,
-              duration: result.duration_ms ? `${Math.round(result.duration_ms / 1000)}s` : undefined,
-              turns: result.num_turns,
-              sessionId: result.session_id,
-              exitCode: code,
-            });
+            const cost = result.total_cost_usd || result.cost_usd;
+
+            if (result.subtype === "error_max_budget_usd") {
+              resolvePromise({
+                message: `Claude Code hit budget limit ($${cost?.toFixed(2)}). The task needs a higher budget — retry with maxBudget: ${Math.ceil((cost || 2) * 2)}`,
+                needsHigherBudget: true,
+                cost,
+                sessionId: result.session_id,
+              });
+            } else if (result.is_error || result.subtype?.startsWith("error")) {
+              resolvePromise({
+                message: `Claude Code error: ${result.result || result.subtype || "unknown"}`,
+                error: result.result || result.errors?.join(", ") || "Unknown error",
+                cost,
+                sessionId: result.session_id,
+                suggestion: "Check if the working directory exists and try a simpler task. You can also try spawn_claude again with different instructions.",
+              });
+            } else {
+              resolvePromise({
+                message: `Claude Code completed (${result.num_turns || "?"} turns, $${cost?.toFixed(4) || "?"})`,
+                result: result.result?.slice(0, 3000) || "No output",
+                cost,
+                duration: result.duration_ms ? `${Math.round(result.duration_ms / 1000)}s` : undefined,
+                turns: result.num_turns,
+                sessionId: result.session_id,
+                exitCode: code,
+              });
+            }
           } catch {
             // Not valid JSON — return raw output
             resolvePromise({
@@ -95,6 +127,7 @@ export const spawnAgentTools = {
           resolvePromise({
             message: `Failed to spawn Claude Code: ${err.message}`,
             error: err.message,
+            suggestion: "Try running 'claude --version' manually to verify Claude Code is installed. If it works, try a simpler task first.",
           });
         });
       });
