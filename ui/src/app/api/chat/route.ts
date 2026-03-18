@@ -3,6 +3,7 @@ import { streamText, stepCountIs, convertToModelMessages } from "ai";
 import { allTools } from "@/lib/ai/tools";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { loadDevEnv } from "@/lib/env";
+import { getOrCreateCache } from "@/lib/gemini-cache";
 import { getConvexClient, isConvexMode } from "@/lib/convex-server";
 import { api } from "@/lib/convex-api";
 
@@ -207,7 +208,7 @@ export async function POST(req: Request) {
         onError: (error) => {
           const msg = String((error as { error?: unknown }).error || error);
           if (msg.includes("429") || msg.includes("503") || msg.includes("exhausted")) {
-            console.log(`[Chat] ${modelName} rate limited during stream`);
+            console.log(`[Chat] ${modelName} rate limited`);
           } else {
             console.error(`[Chat ${modelName}]`, msg.slice(0, 200));
           }
