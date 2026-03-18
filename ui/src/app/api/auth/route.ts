@@ -13,12 +13,13 @@ export async function GET() {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const oauthToken = process.env.CLAUDE_OAUTH_TOKEN;
+  const googleKey = process.env.GOOGLE_API_KEY;
 
-  return NextResponse.json({
-    connected: !!(apiKey || oauthToken),
-    method: apiKey ? "api-key" : oauthToken ? "setup-token" : null,
-    masked: apiKey ? maskKey(apiKey) : oauthToken ? maskKey(oauthToken) : null,
-  });
+  const connected = !!(apiKey || oauthToken || googleKey);
+  const method = apiKey ? "api-key" : oauthToken ? "setup-token" : googleKey ? "google" : null;
+  const masked = apiKey ? maskKey(apiKey) : oauthToken ? maskKey(oauthToken) : googleKey ? maskKey(googleKey) : null;
+
+  return NextResponse.json({ connected, method, masked });
 }
 
 export async function POST(req: Request) {

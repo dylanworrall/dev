@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GitBranchIcon, SearchIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { GitBranchIcon, SearchIcon, GithubIcon, LinkIcon } from "lucide-react";
 import { RepoCard } from "@/components/RepoCard";
+import { Button } from "@/components/ui/button";
 
 interface Repo {
-  id: string;
+  id?: string;
+  _id?: string;
   name: string;
   fullName: string;
   url: string;
@@ -17,10 +20,12 @@ interface Repo {
 }
 
 export default function ReposPage() {
+  const router = useRouter();
   const [repos, setRepos] = useState<Repo[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [langFilter, setLangFilter] = useState("");
+  const [githubConnected, setGithubConnected] = useState<boolean | null>(null);
 
   useEffect(() => {
     fetch("/api/repos")
@@ -28,6 +33,13 @@ export default function ReposPage() {
       .then(setRepos)
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        setGithubConnected(data?.integrations?.github?.configured || false);
+      })
+      .catch(() => setGithubConnected(false));
   }, []);
 
   const languages = [...new Set(repos.map((r) => r.language).filter(Boolean))];
@@ -40,15 +52,44 @@ export default function ReposPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-          <GitBranchIcon className="size-5 text-accent" />
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
+            <GitBranchIcon className="size-5 text-accent" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-foreground">Repos</h1>
+            <p className="text-sm text-muted-foreground">Tracked repositories</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Repos</h1>
-          <p className="text-sm text-muted-foreground">Tracked repositories</p>
-        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => router.push("/?project=connect-github")}
+        >
+          <LinkIcon className="size-4 mr-1" />
+          Track Repo
+        </Button>
       </div>
+
+      {/* GitHub connection banner */}
+      {githubConnected === false && (
+        <div className="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
+            <GithubIcon className="size-5 text-yellow-500" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-foreground">GitHub not connected</p>
+            <p className="text-xs text-muted-foreground">Connect your GitHub account to track repos, review PRs, and manage issues.</p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => router.push("/?project=connect-github")}
+          >
+            Connect
+          </Button>
+        </div>
+      )}
 
       {/* Search & Filter */}
       <div className="flex gap-3 mb-6">
@@ -89,8 +130,8 @@ export default function ReposPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((repo) => (
-            <RepoCard key={repo.id} {...repo} />
+          {filtered.map((repo, idx) => (
+            <RepoCard key={repo.id || repo._id || idx} {...repo} />
           ))}
         </div>
       )}

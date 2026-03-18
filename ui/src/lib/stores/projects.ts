@@ -8,6 +8,7 @@ export interface Project {
   url: string;
   client: string;
   notes: string;
+  localPath?: string;
   auditIds: string[];
   crawlIds: string[];
   createdAt: string;
@@ -29,7 +30,7 @@ async function saveAll(items: Project[]): Promise<void> {
   await writeFile(FILE_PATH(), JSON.stringify(items, null, 2), "utf-8");
 }
 
-export async function createProject(data: { name: string; url: string; client: string; notes?: string }): Promise<Project> {
+export async function createProject(data: { name: string; url: string; client: string; notes?: string; localPath?: string }): Promise<Project> {
   const items = await getAll();
   const project: Project = {
     id: crypto.randomUUID(),
@@ -37,6 +38,7 @@ export async function createProject(data: { name: string; url: string; client: s
     url: data.url,
     client: data.client,
     notes: data.notes || "",
+    localPath: data.localPath,
     auditIds: [],
     crawlIds: [],
     createdAt: new Date().toISOString(),
