@@ -28,7 +28,7 @@ export const spawnAgentTools = {
       if (!existsSync(workDir)) mkdirSync(workDir, { recursive: true });
 
       const args = [
-        "-p", task,
+        "-p",
         "--output-format", "json",
         "--dangerously-skip-permissions",
       ];
@@ -42,12 +42,17 @@ export const spawnAgentTools = {
         let stderr = "";
         let killed = false;
 
+        // Pipe task via stdin to avoid shell quoting issues with special characters
         const proc = spawn("claude", args, {
           cwd: workDir,
           shell: true,
-          stdio: ["ignore", "pipe", "pipe"],
+          stdio: ["pipe", "pipe", "pipe"],
           env: buildCleanEnv(),
         });
+
+        // Write task to stdin and close it
+        proc.stdin.write(task);
+        proc.stdin.end();
 
         const timeout = setTimeout(() => {
           killed = true;
