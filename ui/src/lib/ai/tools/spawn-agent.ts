@@ -2,44 +2,12 @@ import { tool } from "ai";
 import { z } from "zod";
 import { spawn } from "node:child_process";
 import { getWorkspaceRoot } from "@/lib/workspace";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { homedir } from "node:os";
 
-// ── Session persistence ──
-const SESSION_FILE = join(homedir(), ".dev-client", "data", "claude-sessions.json");
-
-interface SessionStore {
-  [projectKey: string]: {
-    sessionId: string;
-    createdAt: string;
-    lastUsedAt: string;
-  };
-}
-
-function loadSessions(): SessionStore {
-  try { return JSON.parse(readFileSync(SESSION_FILE, "utf-8")); }
-  catch { return {}; }
-}
-
-function saveSession(key: string, sessionId: string): void {
-  const sessions = loadSessions();
-  sessions[key] = {
-    sessionId,
-    createdAt: sessions[key]?.createdAt || new Date().toISOString(),
-    lastUsedAt: new Date().toISOString(),
-  };
-  const dir = join(SESSION_FILE, "..");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(SESSION_FILE, JSON.stringify(sessions, null, 2));
-}
-
-function getSession(key: string): string | undefined {
-  return loadSessions()[key]?.sessionId;
-}
-
-// ── Build clean env (strip CLAUDECODE to prevent nesting detection) ──
 function buildCleanEnv(): NodeJS.ProcessEnv {
+  // Strip CLAUDECODE to prevent nesting detection (OpenClaw pattern)
   const { CLAUDECODE: _, ...cleanEnv } = process.env;
   return {
     ...cleanEnv,
@@ -47,45 +15,32 @@ function buildCleanEnv(): NodeJS.ProcessEnv {
   };
 }
 
-// ── Spawn Claude Code ──
-
 export const spawnAgentTools = {
   spawn_claude: tool({
-    description: "Spawn Claude Code to do coding work. It has full filesystem + terminal access. Supports session resuming — Claude Code remembers previous work on the same project. Use this for ALL coding: writing files, building components, fixing bugs, installing packages. Give it clear, specific tasks.",
+    description: "Spawn Claude Code (Opus) to do coding work. Uses your Claude Code subscription — no extra API cost. Claude Code has full filesystem + terminal access. Use for: writing code, building components, editing files, fixing bugs, installing packages, running builds. Give it a clear, specific task.",
     inputSchema: z.object({
-      task: z.string().describe("Clear task for Claude Code. Be specific: what to build, which files, what it should look like. Include any reference URLs or design requirements."),
+      task: z.string().describe("Clear, detailed task for Claude Code. Include: what to build, which files, design requirements, reference URLs. The more specific, the better the result."),
       cwd: z.string().optional().describe("Working directory (relative to workspace root)"),
-      sessionKey: z.string().optional().describe("Project key for session resuming (e.g., 'soshi-website'). Reuses previous Claude Code session so it remembers context."),
-      systemPrompt: z.string().optional().describe("Extra instructions to append to Claude Code's system prompt"),
+      appendPrompt: z.string().optional().describe("Extra system prompt to append (design guidelines, constraints, etc.)"),
     }),
-    execute: async ({ task, cwd, sessionKey, systemPrompt }) => {
+    execute: async ({ task, cwd, appendPrompt }) => {
       const workDir = cwd ? resolve(getWorkspaceRoot(), cwd) : getWorkspaceRoot();
       if (!existsSync(workDir)) mkdirSync(workDir, { recursive: true });
 
-      // Check for existing session to resume
-      const existingSessionId = sessionKey ? getSession(sessionKey) : undefined;
-      const isResume = !!existingSessionId;
-
-      // Build args — following ClaudeClaw/OpenClaw patterns
-      const args: string[] = [
+      const args = [
         "-p", task,
-        "--output-format", isResume ? "text" : "json",
+        "--output-format", "json",
         "--dangerously-skip-permissions",
       ];
 
-      // Resume existing session if available
-      if (isResume && existingSessionId) {
-        args.push("--resume", existingSessionId);
-      }
-
-      // Append system prompt for context
-      if (systemPrompt) {
-        args.push("--append-system-prompt", systemPrompt);
+      if (appendPrompt) {
+        args.push("--append-system-prompt", appendPrompt);
       }
 
       return new Promise<Record<string, unknown>>((resolvePromise) => {
         let stdout = "";
         let stderr = "";
+        let killed = false;
 
         const proc = spawn("claude", args, {
           cwd: workDir,
@@ -95,33 +50,27 @@ export const spawnAgentTools = {
         });
 
         const timeout = setTimeout(() => {
+          killed = true;
           proc.kill("SIGTERM");
-          setTimeout(() => proc.kill("SIGKILL"), 5000);
-          resolvePromise({
-            message: "Claude Code timed out after 5 minutes. It may still be working — try resuming with the same sessionKey.",
-            timedOut: true,
-            partialOutput: stdout.slice(-2000),
-          });
+          setTimeout(() => { try { proc.kill("SIGKILL"); } catch {} }, 5000);
         }, 300_000);
 
-        proc.stdout.on("data", (data) => { stdout += data.toString(); });
-        proc.stderr.on("data", (data) => { stderr += data.toString(); });
+        proc.stdout.on("data", (d) => { stdout += d.toString(); });
+        proc.stderr.on("data", (d) => { stderr += d.toString(); });
 
         proc.on("close", (code) => {
           clearTimeout(timeout);
 
-          if (isResume) {
-            // Resumed session returns text, not JSON
+          if (killed) {
             resolvePromise({
-              message: `Claude Code completed (resumed session)`,
-              result: stdout.slice(-3000) || "No output",
-              resumed: true,
-              exitCode: code,
+              message: "Claude Code timed out (5min). Try a smaller task.",
+              timedOut: true,
+              partialOutput: stdout.slice(-1000),
             });
             return;
           }
 
-          // New session returns JSON
+          // Parse JSON output
           try {
             const result = JSON.parse(stdout) as {
               type?: string;
@@ -135,44 +84,43 @@ export const spawnAgentTools = {
               errors?: string[];
             };
 
-            // Save session ID for future resume
-            if (result.session_id && sessionKey) {
-              saveSession(sessionKey, result.session_id);
-            }
-
             if (result.is_error || result.subtype?.startsWith("error")) {
               resolvePromise({
-                message: `Claude Code error: ${result.result || result.subtype || "unknown"}`,
-                error: result.result || result.errors?.join(", "),
-                sessionId: result.session_id,
-                suggestion: "Try breaking the task into smaller pieces, or check if the working directory is correct.",
+                message: `Claude Code error: ${result.subtype || "unknown"}`,
+                error: result.result || result.errors?.join(", ") || "Unknown error",
+                suggestion: "Try a simpler or more specific task. Check that the working directory exists and has the right files.",
               });
             } else {
               resolvePromise({
                 message: `Claude Code completed (${result.num_turns || "?"} turns, ${result.duration_ms ? Math.round(result.duration_ms / 1000) + "s" : "?"})`,
-                result: result.result?.slice(0, 3000) || "No output",
+                result: result.result?.slice(0, 3000) || "Done",
                 turns: result.num_turns,
                 duration: result.duration_ms ? `${Math.round(result.duration_ms / 1000)}s` : undefined,
                 sessionId: result.session_id,
-                exitCode: code,
               });
             }
           } catch {
-            // Not JSON — return raw output
-            resolvePromise({
-              message: code === 0 ? "Claude Code completed" : `Claude Code exited (code ${code})`,
-              result: stdout.slice(-3000) || stderr.slice(-1000) || "No output",
-              exitCode: code,
-            });
+            // Raw text output
+            if (code === 0 && stdout.trim()) {
+              resolvePromise({
+                message: "Claude Code completed",
+                result: stdout.slice(-3000),
+              });
+            } else {
+              resolvePromise({
+                message: `Claude Code exited (code ${code})`,
+                error: stderr.slice(-500) || stdout.slice(-500) || "No output",
+                suggestion: "Check stderr output above. Common issues: claude CLI not logged in, or task too vague.",
+              });
+            }
           }
         });
 
         proc.on("error", (err) => {
           clearTimeout(timeout);
           resolvePromise({
-            message: `Failed to spawn Claude Code: ${err.message}`,
-            error: err.message,
-            suggestion: "Check that 'claude' CLI is installed and in PATH.",
+            message: `Cannot find claude CLI: ${err.message}`,
+            suggestion: "Install Claude Code: https://docs.anthropic.com/en/docs/claude-code",
           });
         });
       });
@@ -180,9 +128,9 @@ export const spawnAgentTools = {
   }),
 
   spawn_codex: tool({
-    description: "Spawn OpenAI Codex CLI for coding tasks. Alternative to Claude Code. Requires 'codex' CLI installed (npm i -g @openai/codex) and OPENAI_API_KEY set.",
+    description: "Spawn OpenAI Codex CLI for coding tasks. Alternative to Claude Code. Requires: npm i -g @openai/codex and OPENAI_API_KEY.",
     inputSchema: z.object({
-      task: z.string().describe("Task description for Codex"),
+      task: z.string().describe("Task for Codex"),
       cwd: z.string().optional().describe("Working directory"),
     }),
     execute: async ({ task, cwd }) => {
@@ -194,37 +142,22 @@ export const spawnAgentTools = {
         let stderr = "";
 
         const proc = spawn("codex", ["--quiet", "--full-auto", task], {
-          cwd: workDir,
-          shell: true,
+          cwd: workDir, shell: true,
           stdio: ["ignore", "pipe", "pipe"],
-          env: buildCleanEnv(),
         });
 
-        const timeout = setTimeout(() => {
-          proc.kill();
-          resolvePromise({ message: "Codex timed out", timedOut: true });
-        }, 300_000);
-
+        const timeout = setTimeout(() => { proc.kill(); resolvePromise({ message: "Codex timed out" }); }, 300_000);
         proc.stdout.on("data", (d) => { stdout += d.toString(); });
         proc.stderr.on("data", (d) => { stderr += d.toString(); });
-
         proc.on("close", (code) => {
           clearTimeout(timeout);
           resolvePromise({
             message: code === 0 ? "Codex completed" : `Codex exited (code ${code})`,
             result: stdout.slice(-3000) || "No output",
             error: code !== 0 ? stderr.slice(-500) : undefined,
-            exitCode: code,
           });
         });
-
-        proc.on("error", (err) => {
-          clearTimeout(timeout);
-          resolvePromise({
-            message: `Codex not found: ${err.message}. Install: npm i -g @openai/codex`,
-            error: err.message,
-          });
-        });
+        proc.on("error", (err) => { clearTimeout(timeout); resolvePromise({ message: `Codex not found: ${err.message}` }); });
       });
     },
   }),

@@ -10,7 +10,10 @@
       "Bash(which claude:*)",
       "WebFetch(domain:www.google.com)",
       "WebFetch(domain:github.com)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(which claude-max-api-proxy:*)",
+      "Bash(npm install:*)",
+      "Bash(npx claude-max-api-proxy:*)"
     ]
   }
 }
