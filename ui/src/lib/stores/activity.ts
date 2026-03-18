@@ -4,7 +4,7 @@ import { getDataDir } from "./paths";
 
 export interface ActivityLogEntry {
   id: string;
-  type: "audit_run" | "crawl_run" | "project_created" | "seo_analysis" | "sitemap_generated";
+  type: "audit_run" | "crawl_run" | "project_created" | "seo_analysis" | "sitemap_generated" | "github_pr_created" | "github_pr_reviewed" | "github_issue_created" | "deploy_triggered" | "deploy_completed" | "deploy_rolled_back" | "pipeline_run";
   summary: string;
   timestamp: string;
   metadata?: Record<string, unknown>;

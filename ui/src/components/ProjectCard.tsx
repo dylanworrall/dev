@@ -1,9 +1,11 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 import { FolderKanbanIcon, GlobeIcon, FileSearchIcon, BugIcon } from "lucide-react";
 
 interface ProjectCardProps {
+  id: string;
   name: string;
   client: string;
   url: string;
@@ -12,9 +14,17 @@ interface ProjectCardProps {
   status?: "active" | "archived";
 }
 
-export function ProjectCard({ name, client, url, auditCount, crawlCount, status = "active" }: ProjectCardProps) {
+export function ProjectCard({ id, name, client, url, auditCount, crawlCount, status = "active" }: ProjectCardProps) {
+  const router = useRouter();
+
+  const handleClick = () => {
+    router.push(`/?project=${encodeURIComponent(name)}`);
+  };
+
   return (
-    <div className="rounded-xl border border-border bg-surface-1 p-4 hover:border-accent/30 transition-colors">
+    <div
+      onClick={handleClick}
+      className="rounded-xl border border-border bg-surface-1 p-4 hover:border-accent/30 transition-colors cursor-pointer">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">

@@ -6,7 +6,8 @@ import { ProjectCard } from "@/components/ProjectCard";
 import { Button } from "@/components/ui/button";
 
 interface Project {
-  id: string;
+  id?: string;
+  _id?: string;
   name: string;
   url: string;
   client: string;
@@ -56,9 +57,10 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {projects.map((project) => (
+          {projects.map((project, idx) => (
             <ProjectCard
-              key={project.id}
+              key={project.id || project._id || idx}
+              id={project.id || project._id || String(idx)}
               name={project.name}
               client={project.client}
               url={project.url}

@@ -1,9 +1,9 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { isToolUIPart } from "ai";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { isToolUIPart, getToolName } from "ai";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Conversation,
@@ -16,6 +16,7 @@ import {
   MessageResponse,
 } from "@/components/ai-elements/message";
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
+import { ToolActivity } from "@/components/ai-elements/tool-activity";
 import {
   PromptInput,
   PromptInputTextarea,
@@ -31,10 +32,12 @@ const taglines = [
 ];
 
 const suggestions = [
-  "Run a site audit",
-  "List my projects",
-  "Check SEO",
-  "Crawl a site",
+  "Build me a web app",
+  "Audit a website",
+  "Review a PR",
+  "Deploy my site",
+  "Search the web",
+  "Run some code",
 ];
 
 function RotatingTagline() {
@@ -67,10 +70,12 @@ function RotatingTagline() {
 
 export default function ChatPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [authChecked, setAuthChecked] = useState(false);
   const { messages, sendMessage, status } = useChat();
   const isLoading = status === "submitted" || status === "streaming";
   const hasMessages = messages.length > 0;
+  const resumeSent = useRef(false);
 
   useEffect(() => {
     fetch("/api/auth")
@@ -84,6 +89,20 @@ export default function ChatPage() {
       })
       .catch(() => setAuthChecked(true));
   }, [router]);
+
+  // Auto-resume project when navigating from Projects tab
+  useEffect(() => {
+    const projectName = searchParams.get("project");
+    if (projectName && authChecked && !resumeSent.current && !hasMessages) {
+      resumeSent.current = true;
+      if (projectName === "connect-github") {
+        sendMessage({ text: "Help me connect my GitHub account so I can track repos and manage PRs" });
+      } else {
+        sendMessage({ text: `Resume working on "${projectName}"` });
+      }
+      router.replace("/", { scroll: false });
+    }
+  }, [searchParams, authChecked, hasMessages, sendMessage, router]);
 
   if (!authChecked) {
     return (
@@ -99,8 +118,8 @@ export default function ChatPage() {
         <>
           <Conversation className="flex-1">
             <ConversationContent className="max-w-3xl mx-auto w-full">
-              {messages.map((msg) => (
-                <Message key={msg.id} from={msg.role}>
+              {messages.map((msg, msgIdx) => (
+                <Message key={`${msg.id}-${msgIdx}`} from={msg.role}>
                   <MessageContent>
                     {msg.parts.map((part, i) => {
                       if (part.type === "text" && part.text) {
@@ -113,18 +132,20 @@ export default function ChatPage() {
                           </MessageResponse>
                         );
                       }
-                      if (isToolUIPart(part)) {
-                        const toolName = "toolName" in part ? (part as { toolName: string }).toolName : undefined;
+                      if (isToolUIPart(part) && part.state) {
+                        const toolName = getToolName(part);
                         return (
-                          <Tool key={i}>
-                            <ToolHeader {...({ type: part.type, state: part.state, ...(toolName ? { toolName } : {}) } as React.ComponentProps<typeof ToolHeader>)} />
-                            <ToolContent>
-                              <ToolInput input={part.input} />
-                              {part.state === "output-available" && (
-                                <ToolOutput output={part.output} errorText={"errorText" in part ? (part as { errorText?: string }).errorText : undefined} />
-                              )}
-                            </ToolContent>
-                          </Tool>
+                          <ToolActivity
+                            key={i}
+                            toolName={toolName}
+                            state={part.state}
+                            input={part.input}
+                            output={part.state === "output-available" ? part.output : undefined}
+                            errorText={"errorText" in part ? (part as { errorText?: string }).errorText : undefined}
+                            onUserChoice={(choice) => {
+                              sendMessage({ text: choice });
+                            }}
+                          />
                         );
                       }
                       return null;
