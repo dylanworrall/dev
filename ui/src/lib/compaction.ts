@@ -30,7 +30,7 @@ export function estimateTokens(messages: CompactableMessage[]): number {
  * Check if messages should be compacted.
  * Returns true if estimated tokens exceed the threshold.
  */
-export function shouldCompact(messages: CompactableMessage[], maxTokens = 150_000): boolean {
+export function shouldCompact(messages: CompactableMessage[], maxTokens = 50_000): boolean {
   return estimateTokens(messages) > maxTokens;
 }
 
@@ -47,7 +47,7 @@ export async function compactMessages<T extends CompactableMessage>(
     oauthToken?: string;
   } = {}
 ): Promise<T[]> {
-  const keepRecent = options.keepRecent || 20;
+  const keepRecent = options.keepRecent || 10;
 
   if (messages.length <= keepRecent) return messages;
 

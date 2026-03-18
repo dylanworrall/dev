@@ -3,7 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { isToolUIPart, getToolName } from "ai";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Conversation,
@@ -23,6 +23,33 @@ import {
   PromptInputSubmit,
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+
+const MODELS = [
+  { id: "gemini-2.5-flash-lite", label: "Flash Lite", desc: "Fast, free tier friendly" },
+  { id: "gemini-2.5-flash", label: "Flash", desc: "Balanced speed & quality" },
+  { id: "gemini-3.1-pro-preview", label: "3.1 Pro", desc: "Best quality, higher quota usage" },
+];
+
+function ModelPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center gap-1 bg-muted/30 rounded-full p-0.5">
+      {MODELS.map((m) => (
+        <button
+          key={m.id}
+          onClick={() => onChange(m.id)}
+          title={m.desc}
+          className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+            value === m.id
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const taglines = [
   "Audit any site in seconds.",
@@ -72,10 +99,33 @@ export default function ChatPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [authChecked, setAuthChecked] = useState(false);
-  const { messages, sendMessage, status } = useChat();
+  const [model, setModel] = useState(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("dev-model") || "gemini-2.5-flash-lite";
+    return "gemini-2.5-flash-lite";
+  });
+  const chat = useChat();
+  const { status, setMessages } = chat;
+  // Auto-trim: if messages exceed 30, keep only the last 15
+  const messages = chat.messages;
+  const sendMessage = chat.sendMessage;
+  useEffect(() => {
+    if (messages.length > 15) {
+      setMessages(messages.slice(-8));
+    }
+  }, [messages.length, messages, setMessages]);
+
+  // Sync model choice to cookie so server can read it
+  useEffect(() => {
+    document.cookie = `dev-model=${model};path=/;max-age=31536000`;
+  }, [model]);
   const isLoading = status === "submitted" || status === "streaming";
   const hasMessages = messages.length > 0;
   const resumeSent = useRef(false);
+
+  const handleModelChange = useCallback((newModel: string) => {
+    setModel(newModel);
+    localStorage.setItem("dev-model", newModel);
+  }, []);
 
   useEffect(() => {
     fetch("/api/auth")
@@ -116,6 +166,15 @@ export default function ChatPage() {
     <div className="flex flex-col h-screen">
       {hasMessages ? (
         <>
+          {/* New Chat button */}
+          <div className="flex justify-end px-4 pt-2">
+            <button
+              onClick={() => window.location.reload()}
+              className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded-md border border-border hover:border-accent/30 transition-colors"
+            >
+              + New Chat
+            </button>
+          </div>
           <Conversation className="flex-1">
             <ConversationContent className="max-w-3xl mx-auto w-full">
               {messages.map((msg, msgIdx) => (
@@ -156,11 +215,16 @@ export default function ChatPage() {
               {isLoading && messages[messages.length - 1]?.role === "user" && (
                 <Shimmer className="text-sm">Thinking...</Shimmer>
               )}
+              {status === "error" && (
+                <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3 mx-2">
+                  Model failed to respond — likely quota exhausted. Try switching to a lighter model or wait a minute.
+                </div>
+              )}
             </ConversationContent>
             <ConversationScrollButton />
           </Conversation>
 
-          <div className="px-4 pb-4 pt-2 max-w-3xl mx-auto w-full">
+          <div className="px-4 pb-4 pt-2 max-w-3xl mx-auto w-full space-y-2">
             <PromptInput
               onSubmit={(message) => {
                 if (message.text.trim()) {
@@ -168,9 +232,13 @@ export default function ChatPage() {
                 }
               }}
             >
-              <PromptInputTextarea placeholder="Ask about SEO, performance, audits..." />
+              <PromptInputTextarea placeholder="What do you want to build?" />
               <PromptInputSubmit disabled={isLoading} />
             </PromptInput>
+            <div className="flex items-center justify-between px-1">
+              <ModelPicker value={model} onChange={handleModelChange} />
+              <span className="text-[10px] text-muted-foreground">{messages.length} messages</span>
+            </div>
           </div>
         </>
       ) : (
@@ -209,7 +277,7 @@ export default function ChatPage() {
           </motion.div>
 
           {/* Prompt input */}
-          <div className="w-full max-w-3xl">
+          <div className="w-full max-w-3xl space-y-2">
             <PromptInput
               onSubmit={(message) => {
                 if (message.text.trim()) {
@@ -217,9 +285,12 @@ export default function ChatPage() {
                 }
               }}
             >
-              <PromptInputTextarea placeholder="Ask about SEO, performance, audits..." />
+              <PromptInputTextarea placeholder="What do you want to build?" />
               <PromptInputSubmit disabled={isLoading} />
             </PromptInput>
+            <div className="flex justify-center">
+              <ModelPicker value={model} onChange={handleModelChange} />
+            </div>
           </div>
         </div>
       )}
