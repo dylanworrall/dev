@@ -11,20 +11,23 @@ export const spawnAgentTools = {
     inputSchema: z.object({
       task: z.string().describe("Clear task description for Claude Code. Be specific about what to build, which files to create/edit, and what the end result should look like."),
       cwd: z.string().optional().describe("Working directory for Claude Code (relative to workspace root)"),
-      maxBudget: z.number().optional().describe("Max USD to spend on this task (default: 0.50)"),
+      maxBudget: z.number().optional().describe("Budget tracking limit — not actual charges on subscription (default: no limit)"),
       allowedTools: z.string().optional().describe("Tools to allow (default: all). E.g., 'Bash Edit Write Read'"),
     }),
     execute: async ({ task, cwd, maxBudget, allowedTools }) => {
       const workDir = cwd ? resolve(getWorkspaceRoot(), cwd) : getWorkspaceRoot();
       if (!existsSync(workDir)) mkdirSync(workDir, { recursive: true });
 
-      const budget = maxBudget || 2.00;
       const args = [
         "-p", task,
         "--output-format", "json",
         "--dangerously-skip-permissions",
-        "--max-budget-usd", String(budget),
       ];
+
+      // Only set budget if explicitly provided — subscription users don't need it
+      if (maxBudget) {
+        args.push("--max-budget-usd", String(maxBudget));
+      }
 
       if (allowedTools) {
         args.push("--allowedTools", allowedTools);
