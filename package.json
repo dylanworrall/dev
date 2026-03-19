@@ -1,5 +1,5 @@
 {
-  "name": "dev-client",
+  "name": "@soshilabs/dev",
   "version": "1.0.0",
   "description": "AI-powered web development and SEO audit client — Soshi connector",
   "type": "module",
