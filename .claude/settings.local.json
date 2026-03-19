@@ -14,7 +14,8 @@
       "Bash(which claude-max-api-proxy:*)",
       "Bash(npm install:*)",
       "Bash(npx claude-max-api-proxy:*)",
-      "Bash(powershell -Command \"\\(Get-Process -Id 20816\\).Path\" 2>/dev/null; wmic process where \"ProcessId=20816\" get CommandLine 2>/dev/null | head -5)"
+      "Bash(powershell -Command \"\\(Get-Process -Id 20816\\).Path\" 2>/dev/null; wmic process where \"ProcessId=20816\" get CommandLine 2>/dev/null | head -5)",
+      "Bash(grep:*)"
     ]
   }
 }

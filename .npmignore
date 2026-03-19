@@ -1,0 +1,9 @@
+src/
+ui/src/
+ui/node_modules/
+ui/.next/
+.git/
+.claude/
+.env
+.env.local
+node_modules/

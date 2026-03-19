@@ -1,17 +1,23 @@
 {
   "name": "dev-client",
   "version": "1.0.0",
-  "description": "AI-powered web development and SEO audit client",
+  "description": "AI-powered web development and SEO audit client — Soshi connector",
   "type": "module",
+  "main": "./dist/tools.mjs",
   "bin": {
     "dev": "./dist/cli/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:tools",
+    "build:tools": "node esbuild.config.mjs",
     "dev": "tsx src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "typecheck": "tsc --noEmit"
   },
+  "files": [
+    "dist/",
+    "soshi.manifest.json"
+  ],
   "engines": {
     "node": ">=20.0.0"
   },
@@ -27,6 +33,7 @@
   "devDependencies": {
     "@types/inquirer": "^9.0.9",
     "@types/node": "^22.0.0",
+    "esbuild": "^0.27.4",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
