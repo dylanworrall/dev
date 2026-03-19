@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { getWorkspaceRoot } from "@/lib/workspace";
 
 export const screenshotTools = {
   take_screenshot: tool({
@@ -41,11 +42,12 @@ export const screenshotTools = {
           return errs;
         });
 
-        // Save screenshot to temp file for the web preview
-        const { writeFileSync } = await import("node:fs");
+        // Save screenshot to workspace for accessibility
+        const { writeFileSync, existsSync: ssExists, mkdirSync: ssMkdir } = await import("node:fs");
         const { join } = await import("node:path");
-        const tmpDir = process.env.TEMP || "/tmp";
-        const screenshotPath = join(tmpDir, `dev-screenshot-${Date.now()}.png`);
+        const ssDir = join(getWorkspaceRoot(), ".screenshots");
+        if (!ssExists(ssDir)) ssMkdir(ssDir, { recursive: true });
+        const screenshotPath = join(ssDir, `screenshot-${Date.now()}.png`);
         writeFileSync(screenshotPath, screenshotBuffer);
 
         await browser.close();
