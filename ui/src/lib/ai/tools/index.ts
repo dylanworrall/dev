@@ -21,38 +21,34 @@ import { screenshotTools } from "./screenshot";
 import { scaffoldTools } from "./scaffold";
 import { spawnAgentTools } from "./spawn-agent";
 
+// Legacy object export — used by chat route's tool selection
 export const allTools = {
-  // Auditing & SEO
   ...auditTools,
   ...seoTools,
   ...crawlTools,
   ...contentTools,
-  // Project management
   ...projectTools,
   ...settingsTools,
   ...spaceTools,
-  // GitHub integration
   ...repoTools,
   ...issueTools,
   ...gitTools,
-  // Deployments
   ...deploymentTools,
-  // Orchestration workflows
   ...orchestrationTools,
-  // Filesystem & local git
   ...filesystemTools,
   ...localGitTools,
-  // Code execution
   ...bashTools,
-  // Memory
   ...memoryTools,
-  // Web search
   ...webSearchTools,
-  // Agent loop
   ...agentLoopTools,
-  // Browser / serving / screenshot
   ...openTools,
   ...screenshotTools,
   ...scaffoldTools,
   ...spawnAgentTools,
 };
+
+// Soshi connector export — array format with name on each tool
+export const tools = Object.entries(allTools).map(([name, t]) => ({
+  name,
+  ...(t as Record<string, unknown>),
+}));

@@ -1,0 +1,107 @@
+{
+  "id": "dev-client",
+  "name": "Dev Agent",
+  "icon": "Code",
+  "color": "#F97316",
+  "description": "Autonomous AI dev agent — builds, deploys, and manages web projects with filesystem, git, GitHub, and multi-platform deployment",
+  "configSchema": {
+    "googleApiKey": { "type": "string", "description": "Google API key for Gemini models" },
+    "githubToken": { "type": "string", "description": "GitHub personal access token for repo/PR/issue management" },
+    "netlifyToken": { "type": "string", "description": "Netlify API token for deployments" },
+    "vercelToken": { "type": "string", "description": "Vercel API token for deployments" },
+    "flyApiToken": { "type": "string", "description": "Fly.io API token for container deployments" },
+    "braveApiKey": { "type": "string", "description": "Brave Search API key for web search" },
+    "workspaceRoot": { "type": "string", "description": "Root directory for project files" }
+  },
+  "configFields": [
+    { "key": "googleApiKey", "label": "Google API Key", "type": "password", "group": "AI Models" },
+    { "key": "githubToken", "label": "GitHub Token", "type": "password", "group": "Integrations" },
+    { "key": "netlifyToken", "label": "Netlify Token", "type": "password", "group": "Deployment" },
+    { "key": "vercelToken", "label": "Vercel Token", "type": "password", "group": "Deployment" },
+    { "key": "flyApiToken", "label": "Fly.io Token", "type": "password", "group": "Deployment" },
+    { "key": "braveApiKey", "label": "Brave Search Key", "type": "password", "group": "Integrations" },
+    { "key": "workspaceRoot", "label": "Workspace Root", "type": "string", "group": "General" }
+  ],
+  "events": [
+    {
+      "name": "project_created",
+      "description": "Fires when a new project is created or scaffolded",
+      "schema": { "projectId": "string", "name": "string", "path": "string" }
+    },
+    {
+      "name": "build_completed",
+      "description": "Fires when Claude Code finishes a coding task",
+      "schema": { "sessionId": "string", "turns": "number", "duration": "string", "result": "string" }
+    },
+    {
+      "name": "server_started",
+      "description": "Fires when a dev server is started",
+      "schema": { "port": "number", "url": "string", "pid": "number" }
+    },
+    {
+      "name": "deploy_triggered",
+      "description": "Fires when a deployment is triggered",
+      "schema": { "platform": "string", "deployId": "string", "url": "string" }
+    },
+    {
+      "name": "screenshot_taken",
+      "description": "Fires when a page screenshot is captured",
+      "schema": { "url": "string", "path": "string", "hasErrors": "boolean" }
+    },
+    {
+      "name": "github_pr_created",
+      "description": "Fires when a pull request is created",
+      "schema": { "repo": "string", "number": "number", "title": "string", "url": "string" }
+    },
+    {
+      "name": "github_issue_created",
+      "description": "Fires when a GitHub issue is created",
+      "schema": { "repo": "string", "number": "number", "title": "string", "url": "string" }
+    },
+    {
+      "name": "watcher_event",
+      "description": "Fires when a watcher agent detects new activity on a repo",
+      "schema": { "type": "string", "repo": "string", "title": "string", "url": "string" }
+    }
+  ],
+  "actions": [
+    { "name": "Build App", "description": "Scaffold and build a new web application", "tool": "scaffold_project", "params": { "name": "string", "template": "string" } },
+    { "name": "Spawn Coder", "description": "Delegate a coding task to Claude Code", "tool": "spawn_claude", "params": { "task": "string", "cwd": "string" } },
+    { "name": "Take Screenshot", "description": "Screenshot a localhost page to check design", "tool": "take_screenshot", "params": { "url": "string" } },
+    { "name": "Start Server", "description": "Start a dev server in background", "tool": "start_server", "params": { "command": "string", "cwd": "string" } },
+    { "name": "Create PR", "description": "Create a pull request on GitHub", "tool": "create_pr", "params": { "repoName": "string", "title": "string", "head": "string", "base": "string" } },
+    { "name": "Review PR", "description": "AI-powered code review of a pull request", "tool": "review_pr", "params": { "repoName": "string", "prNumber": "number" } },
+    { "name": "Deploy to Netlify", "description": "Trigger a Netlify deployment", "tool": "trigger_deploy", "params": { "siteId": "string" } },
+    { "name": "Deploy to Vercel", "description": "Create or deploy a Vercel project", "tool": "vercel_deploy", "params": { "action": "string", "projectName": "string" } },
+    { "name": "Deploy to Fly.io", "description": "Deploy a Docker app to Fly.io", "tool": "fly_deploy", "params": { "action": "string", "appName": "string" } },
+    { "name": "Run Audit", "description": "Run a Lighthouse performance audit", "tool": "run_lighthouse", "params": { "url": "string" } },
+    { "name": "Crawl Site", "description": "Crawl a website for SEO analysis", "tool": "crawl_site", "params": { "url": "string" } },
+    { "name": "Search Web", "description": "Search the web for information", "tool": "web_search", "params": { "query": "string" } }
+  ],
+  "routerKeywords": [
+    "build", "create", "scaffold", "app", "website", "project", "code", "develop",
+    "deploy", "netlify", "vercel", "fly", "hosting", "ship", "launch",
+    "git", "commit", "push", "pull", "branch", "merge", "pr", "pull request",
+    "github", "repo", "repository", "issue", "review",
+    "audit", "seo", "lighthouse", "pagespeed", "crawl", "performance",
+    "file", "edit", "write", "read", "directory", "search",
+    "npm", "install", "run", "test", "build", "serve", "start",
+    "screenshot", "design", "component", "tailwind", "react", "nextjs",
+    "fix", "bug", "error", "refactor", "update", "change", "modify",
+    "claude", "codex", "agent", "spawn"
+  ],
+  "examples": [
+    { "prompt": "build me a portfolio website", "description": "Scaffolds a Next.js project and builds a complete portfolio site" },
+    { "prompt": "fix the design on localhost:3002", "description": "Identifies the project and spawns Claude Code to fix it" },
+    { "prompt": "deploy to netlify", "description": "Triggers a Netlify deployment for the current project" },
+    { "prompt": "review the PR on owner/repo", "description": "Fetches the PR diff and posts an AI code review" },
+    { "prompt": "audit example.com for SEO", "description": "Runs a Lighthouse audit and reports scores" },
+    { "prompt": "create a github issue for the broken login", "description": "Creates a GitHub issue with details" },
+    { "prompt": "search the web for tailwind v4 migration guide", "description": "Searches and returns results" },
+    { "prompt": "resume the notes app project", "description": "Loads project context and continues where you left off" }
+  ],
+  "price": 0,
+  "whopPlanId": "",
+  "oauthServices": ["github", "netlify", "vercel"],
+  "builtInServices": ["claude-code", "gemini", "filesystem", "git"]
+}
