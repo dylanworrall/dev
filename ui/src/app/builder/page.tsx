@@ -15,8 +15,11 @@ import {
   teardownWebContainer,
   onServerReady,
   syncEventToFS,
+  bootstrapProject,
+  readProjectFiles,
+  formatFilesAsContext,
 } from "@/lib/webcontainer";
-import { runCommand, writeFiles } from "@/lib/webcontainer/fs-sync";
+import type { BootstrapState } from "@/lib/webcontainer";
 import type { WebContainer } from "@webcontainer/api";
 import type { Terminal as XTerm } from "@xterm/xterm";
 import type { AgentEvent } from "@/lib/agents/types";
@@ -49,6 +52,8 @@ export default function BuilderPage() {
   const [running, setRunning] = useState(false);
   const [agentChoice, setAgentChoice] = useState<AgentChoice>("auto");
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
+  const [bootstrapped, setBootstrapped] = useState(false);
+  const [bootstrapState, setBootstrapState] = useState<BootstrapState>("idle");
   const termRef = useRef<XTerm | null>(null);
   const eventsEndRef = useRef<HTMLDivElement>(null);
 
@@ -113,8 +118,10 @@ export default function BuilderPage() {
   }, [wc]);
 
   // Send prompt to /api/builder, stream SSE events
+  // Auto-scaffolds on first prompt if not already bootstrapped.
+  // Reads current WebContainer files and sends them as context.
   const handleSend = useCallback(async () => {
-    if (!prompt.trim() || running) return;
+    if (!prompt.trim() || running || !wc) return;
     const text = prompt;
     setPrompt("");
     setRunning(true);
@@ -122,11 +129,32 @@ export default function BuilderPage() {
     pushEvent({ type: "task.progress", taskId: "user", message: `> ${text}` });
 
     try {
+      // Auto-scaffold if this is the first prompt
+      if (!bootstrapped) {
+        pushEvent({ type: "task.progress", taskId: "scaffold", message: "Scaffolding project first..." });
+        await bootstrapProject(wc, {
+          onStateChange: (state) => {
+            setBootstrapState(state);
+            if (state === "ready") setBootstrapped(true);
+          },
+          onTerminalOutput: (data) => termRef.current?.write(data),
+        });
+        pushEvent({ type: "task.progress", taskId: "scaffold", message: "Project ready, sending to agent..." });
+      }
+
+      // Read current project files for context
+      pushEvent({ type: "task.progress", taskId: "context", message: "Reading project files..." });
+      const projectFiles = await readProjectFiles(wc);
+      const fileContext = formatFilesAsContext(projectFiles);
+
+      // Send prompt + file context to agent
       const res = await fetch("/api/builder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: text,
+          fileContext,
+          files: projectFiles,
           preferredAgent: agentChoice === "auto" ? undefined : agentChoice,
         }),
       });
@@ -202,61 +230,43 @@ export default function BuilderPage() {
       setRunning(false);
       setActiveAgent(null);
     }
-  }, [prompt, running, agentChoice, pushEvent, syncToWC]);
+  }, [prompt, running, wc, agentChoice, bootstrapped, pushEvent, syncToWC]);
 
-  // Quick scaffold: creates a Vite React app inside WebContainer
+  // Bootstrap project in WebContainer using the template system
   const handleScaffold = useCallback(async () => {
-    if (!wc || running) return;
+    if (!wc || running || bootstrapped) return;
     setRunning(true);
     setActiveAgent("webcontainer");
     pushEvent({ type: "task.accepted", taskId: "scaffold", agent: "webcontainer" });
 
     try {
-      await writeFiles(wc, {
-        "package.json": JSON.stringify({
-          name: "wc-project",
-          private: true,
-          type: "module",
-          scripts: { dev: "vite", build: "vite build" },
-          dependencies: { react: "^19.0.0", "react-dom": "^19.0.0" },
-          devDependencies: { "@vitejs/plugin-react": "^4.5.0", vite: "^6.0.0" },
-        }, null, 2),
-        "index.html": `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Dev</title></head>
-<body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body>
-</html>`,
-        "vite.config.js": `import { defineConfig } from 'vite';\nimport react from '@vitejs/plugin-react';\nexport default defineConfig({ plugins: [react()] });`,
-        "src/main.jsx": `import React from 'react';\nimport ReactDOM from 'react-dom/client';\nimport App from './App';\nReactDOM.createRoot(document.getElementById('root')).render(<App />);`,
-        "src/App.jsx": `export default function App() {\n  return (\n    <div style={{ minHeight: '100vh', background: '#050507', color: '#F5F5F7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui' }}>\n      <div style={{ textAlign: 'center' }}>\n        <h1 style={{ fontSize: '2.5rem', fontWeight: 700 }}>Dev Builder</h1>\n        <p style={{ color: '#8E8E93', marginTop: 8 }}>Edit src/App.jsx to get started</p>\n      </div>\n    </div>\n  );\n}`,
-      });
-
-      pushEvent({ type: "file.created", taskId: "scaffold", path: "package.json", content: "" });
-      pushEvent({ type: "file.created", taskId: "scaffold", path: "src/App.jsx", content: "" });
-
-      // npm install
-      pushEvent({ type: "command.started", taskId: "scaffold", command: "npm install" });
-      termRef.current?.writeln("\x1b[38;2;249;115;22m$\x1b[0m npm install");
-      const install = await runCommand(wc, "npm", ["install"], (data) => {
-        termRef.current?.write(data);
-      });
-      pushEvent({ type: "command.completed", taskId: "scaffold", command: "npm install", exitCode: install.exitCode });
-
-      // npm run dev
-      pushEvent({ type: "command.started", taskId: "scaffold", command: "npm run dev" });
-      termRef.current?.writeln("\x1b[38;2;249;115;22m$\x1b[0m npm run dev");
-      const devProc = await wc.spawn("npm", ["run", "dev"]);
-      devProc.output.pipeTo(new WritableStream({
-        write(data) {
+      await bootstrapProject(wc, {
+        onStateChange: (state) => {
+          setBootstrapState(state);
+          const labels: Record<string, string> = {
+            "writing-files": "Writing template files...",
+            installing: "Installing dependencies...",
+            "starting-server": "Starting dev server...",
+            ready: "Project ready",
+            error: "Bootstrap failed",
+          };
+          if (labels[state]) {
+            pushEvent({ type: "task.progress", taskId: "scaffold", message: labels[state] });
+          }
+          if (state === "ready") {
+            setBootstrapped(true);
+          }
+        },
+        onTerminalOutput: (data) => {
           termRef.current?.write(data);
         },
-      }));
+      });
 
       pushEvent({
         type: "task.completed",
         taskId: "scaffold",
-        summary: "Vite React project scaffolded and running",
-        filesChanged: ["package.json", "index.html", "vite.config.js", "src/main.jsx", "src/App.jsx"],
+        summary: "Vite + React + Tailwind project ready",
+        filesChanged: ["package.json", "index.html", "vite.config.js", "src/main.jsx", "src/App.jsx", "src/index.css"],
       });
     } catch (err) {
       pushEvent({
@@ -269,7 +279,7 @@ export default function BuilderPage() {
       setRunning(false);
       setActiveAgent(null);
     }
-  }, [wc, running, pushEvent]);
+  }, [wc, running, bootstrapped, pushEvent]);
 
   const tabClass = (tab: RightTab) =>
     `px-3 py-1.5 text-xs font-medium transition-colors ${
