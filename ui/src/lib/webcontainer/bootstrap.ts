@@ -124,10 +124,11 @@ export function formatFilesAsContext(files: Record<string, string>): string {
   }
 
   parts.push("---\n");
-  parts.push("Modify the files above to fulfill the user's request.");
-  parts.push("Write complete file contents — never use placeholders or ellipsis.");
-  parts.push("The project uses Vite + React 19 + Tailwind CSS v4 (@import 'tailwindcss', @theme inline block).");
-  parts.push("Do NOT modify vite.config.js or src/main.jsx (infrastructure files).");
+  parts.push("Modify the files above to fulfill the user's request. Return COMPLETE file contents for every file you change.");
+  parts.push("Stack: Vite + React 19 + Tailwind CSS v4 + lucide-react.");
+  parts.push("Tailwind v4: uses @import 'tailwindcss' and @theme inline {} in CSS. No tailwind.config file.");
+  parts.push("Do NOT modify vite.config.js or src/main.jsx — these are locked infrastructure files.");
+  parts.push("Do NOT use placeholder text. Write real content. Make the UI look polished and professional.");
 
   return parts.join("\n");
 }
