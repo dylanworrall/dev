@@ -3,6 +3,7 @@ import { streamText, stepCountIs, convertToModelMessages } from "ai";
 import { allTools } from "@/lib/ai/tools";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { loadDevEnv } from "@/lib/env";
+import { getContextManager } from "@/lib/context/manager";
 import { getOrCreateCache } from "@/lib/gemini-cache";
 import { getConvexClient, isConvexMode } from "@/lib/convex-server";
 import { api } from "@/lib/convex-api";
@@ -15,7 +16,7 @@ const TOOL_SETS: Record<string, string[]> = {
   chat: [], // No tools — just conversation
   ask: ["ask_user"], // Just asking questions
   plan: ["ask_user", "plan", "mark_complete", "create_project"],
-  build: ["spawn_claude", "spawn_codex", "read_file", "list_directory", "run_command", "start_server", "find_port", "scaffold_project", "take_screenshot", "open_browser", "create_project", "resume_project", "update_plan"],
+  build: ["spawn_claude", "spawn_codex", "spawn_agent", "agent_health", "read_file", "list_directory", "run_command", "start_server", "find_port", "scaffold_project", "take_screenshot", "open_browser", "create_project", "resume_project", "update_plan"],
   git: ["git_status", "git_diff", "git_commit", "git_push", "git_init"],
   github: ["create_pr", "review_pr", "list_issues", "create_issue"],
   memory: ["remember", "recall", "resume_project"],
@@ -115,41 +116,13 @@ export async function POST(req: Request) {
   const google = createGoogleGenerativeAI({ apiKey: googleApiKey });
   const systemPrompt = await getSystemPrompt();
 
-  // ── AGGRESSIVE context management ──
-  // 1. Keep only last 6 messages
-  let finalMessages = messages.slice(-6);
-
-  // 2. Strip tool outputs completely — model reads files fresh when needed
-  finalMessages = finalMessages.map((m: Record<string, unknown>) => {
-    if (m.role === "assistant" && Array.isArray(m.parts)) {
-      return {
-        ...m,
-        parts: (m.parts as Array<Record<string, unknown>>).map((p) => {
-          if (p.type && String(p.type).startsWith("tool-")) {
-            return { ...p, output: { done: true } };
-          }
-          if (p.type === "text" && typeof p.text === "string" && (p.text as string).length > 1500) {
-            return { ...p, text: (p.text as string).slice(-1500) };
-          }
-          return p;
-        }),
-      };
-    }
-    if (m.role === "user" && Array.isArray(m.parts)) {
-      return {
-        ...m,
-        parts: (m.parts as Array<Record<string, unknown>>).map((p) => {
-          if (p.type === "text" && typeof p.text === "string" && (p.text as string).length > 800) {
-            return { ...p, text: (p.text as string).slice(-800) };
-          }
-          return p;
-        }),
-      };
-    }
-    return m;
-  });
-
-  const modelMessages = await convertToModelMessages(finalMessages);
+  // ── Context management (Chef-style) ──
+  // Uses LRU file tracking, message collapsing, and character budgeting
+  // instead of the old aggressive 6-message truncation
+  const contextManager = getContextManager();
+  const finalMessages = contextManager.optimizeMessages(messages);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const modelMessages = await convertToModelMessages(finalMessages as any);
 
   // ── Step limiting ──
   const hasToolResults = messages.some((m: { role: string; parts?: Array<{ type: string }> }) =>

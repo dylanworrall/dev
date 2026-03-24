@@ -5,33 +5,43 @@ import { cn } from "@/lib/utils";
 import { useSidebar } from "@/contexts/SidebarContext";
 import {
   MessageSquareIcon,
+  HammerIcon,
   FolderKanbanIcon,
   GitBranchIcon,
   CircleDotIcon,
   RocketIcon,
   SettingsIcon,
+  LogOutIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { SpaceSelector } from "@/components/SpaceSelector";
+import { signOut, authClient } from "@/lib/auth-client";
 
 const navItems = [
   { href: "/", label: "Chat", icon: MessageSquareIcon },
+  { href: "/builder", label: "Builder", icon: HammerIcon },
   { href: "/projects", label: "Projects", icon: FolderKanbanIcon },
   { href: "/repos", label: "Repos", icon: GitBranchIcon },
   { href: "/issues", label: "Issues", icon: CircleDotIcon },
   { href: "/deployments", label: "Deployments", icon: RocketIcon },
-  { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 export function Sidebar() {
   const { collapsed, toggle } = useSidebar();
   const pathname = usePathname();
+  const router = useRouter();
   const [hoverExpanded, setHoverExpanded] = useState(false);
 
   const isExpanded = !collapsed || hoverExpanded;
+  const settingsActive = pathname.startsWith("/settings");
+
+  const handleLogout = async () => {
+    await signOut();
+    router.replace("/login");
+  };
 
   return (
     <aside
@@ -52,6 +62,11 @@ export function Sidebar() {
             Dev
           </span>
         )}
+      </div>
+
+      {/* Space Selector */}
+      <div className="px-0 py-2 border-b border-border">
+        <SpaceSelector expanded={isExpanded} />
       </div>
 
       {/* Navigation */}
@@ -76,13 +91,32 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Space Selector */}
-      <div className="px-0 py-2 border-t border-border">
-        <SpaceSelector expanded={isExpanded} />
-      </div>
+      {/* Bottom: Settings, Logout, Collapse */}
+      <div className="px-2 py-2 border-t border-border space-y-1">
+        <Link
+          href="/settings"
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors w-full",
+            settingsActive
+              ? "bg-accent/10 text-accent"
+              : "text-muted-foreground hover:text-foreground hover:bg-surface-2"
+          )}
+        >
+          <SettingsIcon className="size-5 flex-shrink-0" />
+          {isExpanded && <span className="truncate">Settings</span>}
+        </Link>
 
-      {/* Collapse toggle */}
-      <div className="px-2 py-3 border-t border-border">
+        {authClient && (
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors w-full cursor-pointer"
+          >
+            <LogOutIcon className="size-5 flex-shrink-0" />
+            {isExpanded && <span className="truncate">Log Out</span>}
+          </button>
+        )}
+
         <button
           type="button"
           onClick={toggle}
