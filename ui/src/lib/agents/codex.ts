@@ -1,10 +1,11 @@
-import { spawn, execSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { readFileSync, existsSync, statSync } from "node:fs";
+import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentAdapter, AgentEvent, AgentHealth, AgentTask, AgentCapability } from "./types";
 
 const MAX_FILE_SIZE = 100_000;
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", ".vite"]);
 
 /** Read file content from disk if the JSONL event didn't include it */
 function readFileIfMissing(cwd: string, relPath: string, content: string | undefined): string {
@@ -20,29 +21,55 @@ function readFileIfMissing(cwd: string, relPath: string, content: string | undef
   }
 }
 
-/** Find files changed by Codex that weren't captured in JSONL events */
-function findMissingChangedFiles(cwd: string, alreadyTracked: Set<string>): Array<{ path: string; content: string }> {
-  const files: Array<{ path: string; content: string }> = [];
-  try {
-    const diff = execSync(
-      "git diff --name-only HEAD 2>/dev/null || git diff --name-only 2>/dev/null || git status --porcelain --short 2>/dev/null",
-      { cwd, encoding: "utf-8", timeout: 5000 }
-    ).trim();
-    if (!diff) return files;
+/** Snapshot all files with mtimes */
+function snapshotFiles(cwd: string): Map<string, number> {
+  const snapshot = new Map<string, number>();
+  function walk(dir: string, prefix: string) {
+    try {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        const full = join(dir, entry.name);
+        const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) { walk(full, rel); }
+        else {
+          try { const s = statSync(full); if (s.size <= MAX_FILE_SIZE) snapshot.set(rel, s.mtimeMs); } catch {}
+        }
+      }
+    } catch {}
+  }
+  walk(cwd, "");
+  return snapshot;
+}
 
-    for (const line of diff.split("\n")) {
-      const p = line.replace(/^[MADRCU?\s]+/, "").trim();
-      if (!p || alreadyTracked.has(p) || p.includes("node_modules")) continue;
-      const abs = join(cwd, p);
-      try {
-        if (!existsSync(abs)) continue;
-        const stat = statSync(abs);
-        if (stat.isDirectory() || stat.size > MAX_FILE_SIZE) continue;
-        files.push({ path: p.replace(/\\/g, "/"), content: readFileSync(abs, "utf-8") });
-      } catch { /* skip */ }
-    }
-  } catch { /* git not available */ }
-  return files;
+/** Find files changed since snapshot that weren't in JSONL events */
+function findMissingChangedFiles(
+  cwd: string,
+  beforeSnapshot: Map<string, number>,
+  alreadyTracked: Set<string>
+): Array<{ path: string; content: string }> {
+  const changed: Array<{ path: string; content: string }> = [];
+  function walk(dir: string, prefix: string) {
+    try {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        const full = join(dir, entry.name);
+        const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) { walk(full, rel); }
+        else if (!alreadyTracked.has(rel)) {
+          try {
+            const s = statSync(full);
+            if (s.size > MAX_FILE_SIZE) continue;
+            const prev = beforeSnapshot.get(rel);
+            if (prev === undefined || s.mtimeMs > prev) {
+              changed.push({ path: rel.replace(/\\/g, "/"), content: readFileSync(full, "utf-8") });
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+  walk(cwd, "");
+  return changed;
 }
 
 export class CodexAdapter implements AgentAdapter {
@@ -56,6 +83,9 @@ export class CodexAdapter implements AgentAdapter {
 
   async *execute(task: AgentTask): AsyncIterable<AgentEvent> {
     yield { type: "task.accepted", taskId: task.id, agent: this.name };
+
+    // Snapshot before agent runs
+    const beforeSnapshot = snapshotFiles(task.cwd);
 
     const args = [
       "exec",
@@ -154,7 +184,7 @@ export class CodexAdapter implements AgentAdapter {
                 .filter((e): e is Extract<AgentEvent, { type: "file.modified" }> => e.type === "file.modified")
                 .map(e => e.path)
             );
-            const missing = findMissingChangedFiles(task.cwd, trackedPaths);
+            const missing = findMissingChangedFiles(task.cwd, beforeSnapshot, trackedPaths);
             for (const f of missing) {
               push({ type: "file.modified", taskId: task.id, path: f.path, content: f.content });
               trackedPaths.add(f.path);

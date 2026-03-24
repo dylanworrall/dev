@@ -1,7 +1,7 @@
-import { spawn, execSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { readFileSync, existsSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import type { AgentAdapter, AgentEvent, AgentHealth, AgentTask, AgentCapability } from "./types";
 
 function buildCleanEnv(): NodeJS.ProcessEnv {
@@ -24,46 +24,79 @@ const DESIGN_SYSTEM = `You are a senior frontend developer. Follow these rules:
 - Make sure code compiles without errors`;
 
 const MAX_FILE_SIZE = 100_000; // 100KB — skip binary/huge files
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", ".vite", ".next"]);
 
 /**
- * Read changed files from disk after Claude Code finishes.
- * Uses git diff if available, falls back to checking common paths.
+ * Snapshot all files with their mtimes before agent runs.
  */
-function getChangedFiles(cwd: string): Array<{ path: string; content: string }> {
-  const files: Array<{ path: string; content: string }> = [];
+function snapshotFiles(cwd: string): Map<string, number> {
+  const snapshot = new Map<string, number>();
 
-  try {
-    // Try git diff to find changed/new files
-    const diffOutput = execSync(
-      "git diff --name-only HEAD 2>/dev/null || git diff --name-only 2>/dev/null || git status --porcelain --short 2>/dev/null",
-      { cwd, encoding: "utf-8", timeout: 5000 }
-    ).trim();
+  function walk(dir: string, prefix: string) {
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        const fullPath = join(dir, entry.name);
+        const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
 
-    if (!diffOutput) return files;
-
-    const paths = diffOutput
-      .split("\n")
-      .map((line) => line.replace(/^[MADRCU?\s]+/, "").trim()) // strip git status prefixes
-      .filter(Boolean)
-      .filter((p) => !p.includes("node_modules") && !p.includes(".git/"));
-
-    for (const relPath of paths) {
-      const absPath = join(cwd, relPath);
-      try {
-        if (!existsSync(absPath)) continue;
-        const stat = statSync(absPath);
-        if (stat.isDirectory() || stat.size > MAX_FILE_SIZE) continue;
-        const content = readFileSync(absPath, "utf-8");
-        files.push({ path: relPath.replace(/\\/g, "/"), content });
-      } catch {
-        // Skip unreadable files
+        if (entry.isDirectory()) {
+          walk(fullPath, relPath);
+        } else {
+          try {
+            const stat = statSync(fullPath);
+            if (stat.size <= MAX_FILE_SIZE) {
+              snapshot.set(relPath, stat.mtimeMs);
+            }
+          } catch { /* skip */ }
+        }
       }
-    }
-  } catch {
-    // git not available — no file recovery
+    } catch { /* skip */ }
   }
 
-  return files;
+  walk(cwd, "");
+  return snapshot;
+}
+
+/**
+ * Find files that are new or modified since the snapshot.
+ * Compares file mtimes — works without git.
+ */
+function getChangedFiles(
+  cwd: string,
+  beforeSnapshot: Map<string, number>
+): Array<{ path: string; content: string }> {
+  const changed: Array<{ path: string; content: string }> = [];
+
+  function walk(dir: string, prefix: string) {
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        const fullPath = join(dir, entry.name);
+        const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+        if (entry.isDirectory()) {
+          walk(fullPath, relPath);
+        } else {
+          try {
+            const stat = statSync(fullPath);
+            if (stat.size > MAX_FILE_SIZE) continue;
+
+            const prevMtime = beforeSnapshot.get(relPath);
+            // New file or modified file
+            if (prevMtime === undefined || stat.mtimeMs > prevMtime) {
+              const content = readFileSync(fullPath, "utf-8");
+              changed.push({ path: relPath.replace(/\\/g, "/"), content });
+            }
+          } catch { /* skip */ }
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  walk(cwd, "");
+  return changed;
 }
 
 export class ClaudeCodeAdapter implements AgentAdapter {
@@ -78,6 +111,9 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   async *execute(task: AgentTask): AsyncIterable<AgentEvent> {
     yield { type: "task.accepted", taskId: task.id, agent: this.name };
     yield { type: "task.progress", taskId: task.id, message: "Claude Code working..." };
+
+    // Snapshot file mtimes BEFORE agent runs (for change detection)
+    const beforeSnapshot = snapshotFiles(task.cwd);
 
     const claudeModel = task.model === "opus" ? "claude-opus-4-6" : "claude-sonnet-4-6";
     const systemAppend = DESIGN_SYSTEM + (task.appendPrompt ? "\n\n" + task.appendPrompt : "");
@@ -167,12 +203,13 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       return;
     }
 
-    // ── Bridge: read changed files from disk and emit file events ──
+    // ── Bridge: compare file mtimes to find what the agent changed ──
+    // Compares current files against the pre-agent snapshot.
     // This is how file changes get from the server (local disk) to the
     // client (WebContainer in the browser) via the SSE stream.
     yield { type: "task.progress", taskId: task.id, message: "Syncing file changes..." };
 
-    const changedFiles = getChangedFiles(task.cwd);
+    const changedFiles = getChangedFiles(task.cwd, beforeSnapshot);
     const filePaths: string[] = [];
 
     for (const file of changedFiles) {
