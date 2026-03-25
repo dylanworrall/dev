@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -9,7 +9,7 @@ import {
 import { Terminal } from "@/components/builder/Terminal";
 import { Preview } from "@/components/builder/Preview";
 import { FileExplorer } from "@/components/builder/FileExplorer";
-import { ProgressStream } from "@/components/builder/ProgressStream";
+import { BuilderChat } from "@/components/builder/BuilderChat";
 import {
   getWebContainer,
   teardownWebContainer,
@@ -25,12 +25,10 @@ import type { Terminal as XTerm } from "@xterm/xterm";
 import type { AgentEvent } from "@/lib/agents/types";
 import { Onboarding } from "@/components/builder/Onboarding";
 import {
-  Play,
   Loader2,
   MonitorSmartphone,
   FolderTree,
   TerminalSquare,
-  Send,
   Bot,
   Zap,
 } from "lucide-react";
@@ -48,14 +46,12 @@ export default function BuilderPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [rightTab, setRightTab] = useState<RightTab>("preview");
-  const [prompt, setPrompt] = useState("");
   const [running, setRunning] = useState(false);
   const [agentChoice, setAgentChoice] = useState<AgentChoice>("auto");
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [bootstrapped, setBootstrapped] = useState(false);
   const [bootstrapState, setBootstrapState] = useState<BootstrapState>("idle");
   const termRef = useRef<XTerm | null>(null);
-  const eventsEndRef = useRef<HTMLDivElement>(null);
 
   // Boot WebContainer on mount
   useEffect(() => {
@@ -100,11 +96,6 @@ export default function BuilderPage() {
     return unsub;
   }, []);
 
-  // Scroll events to bottom
-  useEffect(() => {
-    eventsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [events]);
-
   const pushEvent = useCallback((event: AgentEvent) => {
     setEvents((prev) => [...prev, event]);
   }, []);
@@ -120,10 +111,8 @@ export default function BuilderPage() {
   // Send prompt to /api/builder, stream SSE events
   // Auto-scaffolds on first prompt if not already bootstrapped.
   // Reads current WebContainer files and sends them as context.
-  const handleSend = useCallback(async () => {
-    if (!prompt.trim() || running || !wc) return;
-    const text = prompt;
-    setPrompt("");
+  const handleSend = useCallback(async (text: string) => {
+    if (!text.trim() || running || !wc) return;
     setRunning(true);
 
     pushEvent({ type: "task.progress", taskId: "user", message: `> ${text}` });
@@ -230,7 +219,7 @@ export default function BuilderPage() {
       setRunning(false);
       setActiveAgent(null);
     }
-  }, [prompt, running, wc, agentChoice, bootstrapped, pushEvent, syncToWC]);
+  }, [running, wc, agentChoice, bootstrapped, pushEvent, syncToWC]);
 
   // Bootstrap project in WebContainer using the template system
   const handleScaffold = useCallback(async () => {
@@ -302,35 +291,17 @@ export default function BuilderPage() {
   return (
     <div className="h-screen flex flex-col bg-surface-0">
       {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 h-12 border-b border-border bg-surface-1 flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 h-11 border-b border-border bg-surface-1/80 backdrop-blur flex-shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded bg-accent/20 flex items-center justify-center">
-            <span className="text-accent font-bold text-[10px]">B</span>
+          <div className="w-6 h-6 rounded-lg bg-accent/15 flex items-center justify-center">
+            <Zap className="size-3.5 text-accent" />
           </div>
           <span className="text-sm font-semibold text-foreground">Builder</span>
         </div>
 
-        {/* Agent selector */}
-        <div className="flex items-center gap-1 ml-2">
-          {(["auto", "claude-code", "codex"] as const).map((agent) => (
-            <button
-              key={agent}
-              type="button"
-              onClick={() => setAgentChoice(agent)}
-              className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
-                agentChoice === agent
-                  ? "bg-accent/15 text-accent"
-                  : "text-muted-foreground hover:text-foreground hover:bg-surface-2"
-              }`}
-            >
-              {agent === "auto" ? "Auto" : agent === "claude-code" ? "Claude Code" : "Codex"}
-            </button>
-          ))}
-        </div>
-
         <div className="flex-1" />
 
-        {/* Active agent indicator */}
+        {/* Active agent */}
         {activeAgent && (
           <div className="flex items-center gap-1.5 text-xs text-accent">
             <Bot className="size-3.5 animate-pulse" />
@@ -342,74 +313,29 @@ export default function BuilderPage() {
         {booting && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" />
-            Booting WebContainer...
+            Booting...
           </div>
         )}
-        {wc && !booting && (
-          <div className="flex items-center gap-1.5 text-xs text-accent-green">
-            <div className="size-1.5 rounded-full bg-accent-green" />
+        {wc && !booting && !running && (
+          <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+            <div className="size-1.5 rounded-full bg-emerald-400" />
             Ready
           </div>
         )}
-
-        {/* Quick scaffold button */}
-        <button
-          type="button"
-          disabled={!wc || running}
-          onClick={handleScaffold}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 disabled:opacity-40 transition-colors"
-        >
-          {running ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
-          Scaffold
-        </button>
       </div>
 
       {/* Main split pane */}
       <ResizablePanelGroup orientation="horizontal" className="flex-1">
-        {/* Left panel: chat + progress */}
-        <ResizablePanel defaultSize={35} minSize={20}>
-          <div className="h-full flex flex-col">
-            {/* Progress events */}
-            <div className="flex-1 overflow-y-auto">
-              {events.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3 px-6">
-                  <MonitorSmartphone className="size-10 opacity-20" />
-                  <div className="text-center">
-                    <p className="text-sm font-medium">What do you want to build?</p>
-                    <p className="text-xs opacity-60 mt-1">
-                      Type a prompt below or click <span className="text-accent">Scaffold</span> to start with Vite + React
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <ProgressStream events={events} />
-              )}
-              <div ref={eventsEndRef} />
-            </div>
-
-            {/* Input */}
-            <div className="border-t border-border p-3">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                  placeholder={running ? "Agent working..." : "Describe what to build..."}
-                  disabled={running}
-                  className="flex-1 bg-surface-1 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
-                />
-                <button
-                  type="button"
-                  onClick={handleSend}
-                  disabled={!prompt.trim() || running}
-                  className="p-2 rounded-lg bg-accent text-white hover:bg-accent/90 disabled:opacity-40 transition-colors"
-                >
-                  {running ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                </button>
-              </div>
-            </div>
-          </div>
+        {/* Left panel: chat */}
+        <ResizablePanel defaultSize={35} minSize={22}>
+          <BuilderChat
+            events={events}
+            onSend={handleSend}
+            running={running}
+            activeAgent={activeAgent}
+            agentChoice={agentChoice}
+            onAgentChoiceChange={(c) => setAgentChoice(c as AgentChoice)}
+          />
         </ResizablePanel>
 
         <ResizableHandle withHandle />
