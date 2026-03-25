@@ -1,11 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
+// Panels use flex layout with rounded containers
 import { Terminal } from "@/components/builder/Terminal";
 import { Preview } from "@/components/builder/Preview";
 import { FileExplorer } from "@/components/builder/FileExplorer";
@@ -289,9 +285,9 @@ export default function BuilderPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-surface-0">
+    <div className="h-screen flex flex-col bg-[#050507] p-2 gap-2">
       {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 h-11 border-b border-border bg-surface-1/80 backdrop-blur flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 h-11 rounded-xl bg-zinc-900/60 border border-zinc-800/60 flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-accent/15 flex items-center justify-center">
             <Zap className="size-3.5 text-accent" />
@@ -324,10 +320,10 @@ export default function BuilderPage() {
         )}
       </div>
 
-      {/* Main split pane */}
-      <ResizablePanelGroup orientation="horizontal" className="flex-1">
+      {/* Main content area */}
+      <div className="flex-1 flex gap-2 min-h-0">
         {/* Left panel: chat */}
-        <ResizablePanel defaultSize={35} minSize={22}>
+        <div className="w-[380px] min-w-[320px] flex-shrink-0 rounded-xl bg-zinc-900/40 border border-zinc-800/60 overflow-hidden">
           <BuilderChat
             events={events}
             onSend={handleSend}
@@ -336,59 +332,61 @@ export default function BuilderPage() {
             agentChoice={agentChoice}
             onAgentChoiceChange={(c) => setAgentChoice(c as AgentChoice)}
           />
-        </ResizablePanel>
+        </div>
 
-        <ResizableHandle withHandle />
+        {/* Right panels */}
+        <div className="flex-1 flex flex-col gap-2 min-w-0">
+          {/* Preview / Files */}
+          <div className="flex-[7] min-h-0 rounded-xl bg-zinc-900/40 border border-zinc-800/60 overflow-hidden flex flex-col">
+            {/* Tabs */}
+            <div className="flex items-center gap-1 px-2 py-1.5 border-b border-zinc-800/40 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setRightTab("preview")}
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+                  rightTab === "preview"
+                    ? "bg-zinc-800/80 text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-zinc-800/40"
+                }`}
+              >
+                <MonitorSmartphone className="size-3.5" />
+                Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightTab("files")}
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+                  rightTab === "files"
+                    ? "bg-zinc-800/80 text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-zinc-800/40"
+                }`}
+              >
+                <FolderTree className="size-3.5" />
+                Files
+              </button>
+            </div>
 
-        {/* Right panel: preview / files / terminal */}
-        <ResizablePanel defaultSize={65} minSize={30}>
-          <ResizablePanelGroup orientation="vertical">
-            {/* Top: Preview or Files */}
-            <ResizablePanel defaultSize={70} minSize={30}>
-              <div className="h-full flex flex-col">
-                {/* Tabs */}
-                <div className="flex items-center border-b border-border bg-surface-1 flex-shrink-0">
-                  <button type="button" onClick={() => setRightTab("preview")} className={tabClass("preview")}>
-                    <span className="flex items-center gap-1.5">
-                      <MonitorSmartphone className="size-3.5" />
-                      Preview
-                    </span>
-                  </button>
-                  <button type="button" onClick={() => setRightTab("files")} className={tabClass("files")}>
-                    <span className="flex items-center gap-1.5">
-                      <FolderTree className="size-3.5" />
-                      Files
-                    </span>
-                  </button>
-                </div>
+            {/* Tab content */}
+            <div className="flex-1 overflow-hidden">
+              {rightTab === "preview" && <Preview url={previewUrl} />}
+              {rightTab === "files" && <FileExplorer wc={wc} />}
+            </div>
+          </div>
 
-                {/* Tab content */}
-                <div className="flex-1 overflow-hidden">
-                  {rightTab === "preview" && <Preview url={previewUrl} />}
-                  {rightTab === "files" && <FileExplorer wc={wc} />}
-                </div>
-              </div>
-            </ResizablePanel>
-
-            <ResizableHandle withHandle />
-
-            {/* Bottom: Terminal */}
-            <ResizablePanel defaultSize={30} minSize={15}>
-              <div className="h-full flex flex-col">
-                <div className="flex items-center px-3 py-1.5 border-b border-border bg-surface-1 flex-shrink-0">
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    <TerminalSquare className="size-3.5" />
-                    Terminal
-                  </span>
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <Terminal onReady={(t) => { termRef.current = t; }} />
-                </div>
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+          {/* Terminal */}
+          <div className="flex-[3] min-h-[120px] rounded-xl bg-zinc-900/40 border border-zinc-800/60 overflow-hidden flex flex-col">
+            <div className="flex items-center px-3 py-1.5 border-b border-zinc-800/40 flex-shrink-0">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <TerminalSquare className="size-3.5" />
+                Terminal
+              </span>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <Terminal onReady={(t) => { termRef.current = t; }} />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

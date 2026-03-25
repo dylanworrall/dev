@@ -242,7 +242,7 @@ export function BuilderChat({
       </Conversation>
 
       {/* Input area */}
-      <div className="border-t border-border p-3 bg-surface-0">
+      <div className="border-t border-zinc-800/40 p-3">
         {/* Agent selector pills */}
         <div className="flex items-center gap-1 mb-2">
           {(["auto", "claude-code", "codex"] as const).map((agent) => (
@@ -275,7 +275,7 @@ export function BuilderChat({
             placeholder={running ? "Agent working..." : "Build a todo app with dark theme..."}
             disabled={running}
             rows={1}
-            className="flex-1 bg-card border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:opacity-50 min-h-[42px] max-h-[120px]"
+            className="flex-1 bg-zinc-900/60 border border-zinc-800/50 rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none disabled:opacity-50 min-h-[42px] max-h-[120px]"
             style={{ fieldSizing: "content" } as React.CSSProperties}
           />
           <button
