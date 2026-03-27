@@ -112,23 +112,36 @@ export async function readProjectFiles(
  * Format project files as context string for the agent prompt.
  * Follows the <boltArtifact> pattern from Chef/bolt.diy.
  */
+/**
+ * Only include App.jsx and user-created files as context.
+ * Component library source code is EXCLUDED — the design system prompt
+ * tells the agent what's available. This keeps the prompt short so
+ * layout and spacing rules don't get buried under 1000+ lines of
+ * component source code the agent doesn't need to see.
+ */
 export function formatFilesAsContext(files: Record<string, string>): string {
   const parts: string[] = [
-    "Here are the current project files:\n",
+    "## Current App Code\n",
   ];
 
+  // Only include user-editable files, NOT the component library
   for (const [path, content] of Object.entries(files)) {
+    // Skip component library internals — agent already knows about them
+    if (path.includes("components/ui/")) continue;
+    if (path.includes("lib/utils")) continue;
+    if (path === "vite.config.js") continue;
+    if (path === "src/main.jsx") continue;
+
     parts.push(`--- ${path} ---`);
     parts.push(content);
     parts.push("");
   }
 
   parts.push("---\n");
-  parts.push("Modify the files above to fulfill the user's request. Return COMPLETE file contents for every file you change.");
-  parts.push("Stack: Vite + React 19 + Tailwind CSS v4 + lucide-react.");
-  parts.push("Tailwind v4: uses @import 'tailwindcss' and @theme inline {} in CSS. No tailwind.config file.");
-  parts.push("Do NOT modify vite.config.js or src/main.jsx — these are locked infrastructure files.");
-  parts.push("Do NOT use placeholder text. Write real content. Make the UI look polished and professional.");
+  parts.push("ONLY edit src/App.jsx (or create new page/component files outside of components/ui/).");
+  parts.push("Return COMPLETE file contents for every file you change.");
+  parts.push("A full component library exists at @/components/ui — import and USE those components.");
+  parts.push("NEVER rewrite, modify, or duplicate components in src/components/ui/.");
 
   return parts.join("\n");
 }

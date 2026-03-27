@@ -44,17 +44,17 @@ function AgentEventItem({ event, done }: { event: AgentEvent; done: boolean }) {
   switch (event.type) {
     case "task.accepted":
       return (
-        <div className="flex items-center gap-2 text-xs text-accent">
-          <Bot className="size-3.5" />
-          <span className="font-medium">{event.agent}</span>
+        <div className="flex items-center gap-2 text-[12px] font-medium text-[#0A84FF]">
+          <Bot size={12} />
+          <span>{event.agent}</span>
         </div>
       );
 
     case "task.progress":
-      if (event.message.startsWith("> ")) return null; // user messages handled separately
+      if (event.message.startsWith("> ")) return null;
       return (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {done ? <CheckCircle className="size-3 text-zinc-600" /> : <Loader2 className="size-3 animate-spin" />}
+        <div className="flex items-center gap-2 text-[12px] font-medium text-white/40">
+          {done ? <CheckCircle size={10} className="text-white/20" /> : <Loader2 size={10} className="animate-spin" />}
           <span>{event.message}</span>
         </div>
       );
@@ -62,40 +62,40 @@ function AgentEventItem({ event, done }: { event: AgentEvent; done: boolean }) {
     case "file.modified":
     case "file.created":
       return (
-        <div className="flex items-center gap-2 text-xs text-emerald-400/70">
-          <FileCode className="size-3" />
+        <div className="flex items-center gap-2 text-[12px] font-medium text-[#30D158]/70">
+          <FileCode size={10} />
           <span className="font-mono">{event.path}</span>
         </div>
       );
 
     case "command.started":
       return (
-        <div className="flex items-center gap-2 text-xs text-blue-400/70 font-mono">
-          <TerminalSquare className="size-3" />
+        <div className="flex items-center gap-2 text-[12px] font-medium text-[#0A84FF]/70 font-mono">
+          <TerminalSquare size={10} />
           <span>$ {event.command}</span>
         </div>
       );
 
     case "task.completed":
       return (
-        <div className="flex items-start gap-2 text-xs text-emerald-400 mt-1">
-          <CheckCircle className="size-3.5 mt-0.5 flex-shrink-0" />
+        <div className="flex items-start gap-2 text-[12px] font-medium text-[#30D158] mt-1">
+          <CheckCircle size={12} className="mt-0.5 flex-shrink-0" />
           <span>{event.summary.slice(0, 300)}</span>
         </div>
       );
 
     case "task.failed":
       return (
-        <div className="flex items-start gap-2 text-xs text-red-400 mt-1">
-          <XCircle className="size-3.5 mt-0.5 flex-shrink-0" />
+        <div className="flex items-start gap-2 text-[12px] font-medium text-[#FF453A] mt-1">
+          <XCircle size={12} className="mt-0.5 flex-shrink-0" />
           <span>{event.error}</span>
         </div>
       );
 
     case "preview.ready":
       return (
-        <div className="flex items-center gap-2 text-xs text-accent mt-1">
-          <MonitorSmartphone className="size-3.5" />
+        <div className="flex items-center gap-2 text-[12px] font-medium text-[#0A84FF] mt-1">
+          <MonitorSmartphone size={12} />
           <span>Preview ready</span>
         </div>
       );
@@ -109,13 +109,12 @@ function collapseFileEvents(events: AgentEvent[]): AgentEvent[] {
   const fileEvents = events.filter(e => e.type === "file.modified" || e.type === "file.created");
   if (fileEvents.length <= 3) return events;
 
-  // Replace all file events with a single summary, keep everything else
   let replacedFirst = false;
   return events.filter(e => {
     if (e.type === "file.modified" || e.type === "file.created") {
       if (!replacedFirst) {
         replacedFirst = true;
-        return true; // keep first one — we'll render it as summary
+        return true;
       }
       return false;
     }
@@ -139,14 +138,11 @@ export function BuilderChat({
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Build chat messages from events
   const messages: ChatMessage[] = [];
   let currentAssistant: ChatMessage | null = null;
 
   for (const event of events) {
-    // User message
     if (event.type === "task.progress" && "message" in event && event.message.startsWith("> ")) {
-      // Close any open assistant message
       if (currentAssistant) {
         currentAssistant.status = "done";
         currentAssistant = null;
@@ -159,7 +155,6 @@ export function BuilderChat({
       continue;
     }
 
-    // Start new assistant message on task.accepted
     if (event.type === "task.accepted") {
       if (currentAssistant) currentAssistant.status = "done";
       currentAssistant = {
@@ -173,7 +168,6 @@ export function BuilderChat({
       messages.push(currentAssistant);
     }
 
-    // Accumulate events in current assistant message
     if (currentAssistant) {
       currentAssistant.events!.push(event);
       if (event.type === "task.completed") {
@@ -193,7 +187,6 @@ export function BuilderChat({
     setInput("");
   }, [input, running, onSend]);
 
-  // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -205,7 +198,7 @@ export function BuilderChat({
         <ConversationContent className="gap-4 px-3 py-4">
           {messages.length === 0 ? (
             <ConversationEmptyState
-              icon={<MonitorSmartphone className="size-10 opacity-20" />}
+              icon={<MonitorSmartphone size={40} className="text-white/20" />}
               title="What do you want to build?"
               description="Describe your app and the AI agent will generate it with live preview."
             />
@@ -231,8 +224,8 @@ export function BuilderChat({
           {running && !activeAgent && (
             <Message from="assistant">
               <MessageContent>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
+                <div className="flex items-center gap-2 text-[12px] font-medium text-white/40">
+                  <Loader2 size={12} className="animate-spin" />
                   <span>Starting...</span>
                 </div>
               </MessageContent>
@@ -242,7 +235,7 @@ export function BuilderChat({
       </Conversation>
 
       {/* Input area */}
-      <div className="border-t border-zinc-800/40 p-3">
+      <div className="border-t border-white/5 p-3">
         {/* Agent selector pills */}
         <div className="flex items-center gap-1 mb-2">
           {(["auto", "claude-code", "codex"] as const).map((agent) => (
@@ -250,10 +243,10 @@ export function BuilderChat({
               key={agent}
               type="button"
               onClick={() => onAgentChoiceChange(agent)}
-              className={`px-2.5 py-1 text-[11px] font-medium rounded-lg transition-colors ${
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
                 agentChoice === agent
-                  ? "bg-accent/15 text-accent"
-                  : "text-muted-foreground hover:text-foreground hover:bg-zinc-800/50"
+                  ? "bg-[#0A84FF]/10 text-[#0A84FF]"
+                  : "text-white/40 hover:text-white hover:bg-[#3A3A3C]"
               }`}
             >
               {agent === "auto" ? "Auto" : agent === "claude-code" ? "Claude Code" : "Codex"}
@@ -275,16 +268,16 @@ export function BuilderChat({
             placeholder={running ? "Agent working..." : "Build a todo app with dark theme..."}
             disabled={running}
             rows={1}
-            className="flex-1 bg-zinc-900/60 border border-zinc-800/50 rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none disabled:opacity-50 min-h-[42px] max-h-[120px]"
+            className="flex-1 bg-[#1C1C1E] border border-white/5 rounded-lg px-4 py-2.5 text-[14px] font-medium text-white placeholder:text-white/20 focus:outline-none focus:border-[#0A84FF]/50 transition-colors resize-none disabled:opacity-40 disabled:cursor-not-allowed min-h-[42px] max-h-[120px]"
             style={{ fieldSizing: "content" } as React.CSSProperties}
           />
           <button
             type="button"
             onClick={handleSubmit}
             disabled={!input.trim() || running}
-            className="self-end p-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
+            className="self-end p-2.5 rounded-lg bg-[#0A84FF] text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
-            {running ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            {running ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>
         </div>
       </div>

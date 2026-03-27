@@ -33,56 +33,58 @@ export default function DeploymentsPage() {
   const selected = deployments.find((d) => d.id === selectedId);
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-          <RocketIcon className="size-5 text-accent" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Deployments</h1>
-          <p className="text-sm text-muted-foreground">Build and deploy status</p>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="text-center py-12 text-muted-foreground">Loading...</div>
-      ) : deployments.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground mb-2">No deployments yet</p>
-          <p className="text-sm text-muted-foreground">
-            Use the chat to trigger a deployment: &quot;Deploy to staging&quot;
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-border overflow-hidden">
-            {deployments.map((d) => (
-              <div
-                key={d.id}
-                onClick={() => setSelectedId(selectedId === d.id ? null : d.id)}
-                className="cursor-pointer"
-              >
-                <DeploymentRow
-                  environment={d.environment}
-                  status={d.status}
-                  commitSha={d.commitSha}
-                  branch={d.branch}
-                  url={d.url}
-                  createdAt={d.createdAt}
-                  buildDuration={d.buildDuration}
-                />
-              </div>
-            ))}
+    <div className="flex-1 overflow-y-auto scrollbar-hide p-6 text-white">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#FF9F0A]/10 text-[#FF9F0A]">
+            <RocketIcon size={18} />
           </div>
-
-          {selected && (
-            <div>
-              <h3 className="text-sm font-semibold text-foreground mb-2">Build Logs</h3>
-              <BuildLogViewer logs={selected.logs} />
-            </div>
-          )}
+          <div>
+            <h1 className="text-2xl font-bold mb-1">Deployments</h1>
+            <p className="text-white/50 text-sm">Build and deploy status</p>
+          </div>
         </div>
-      )}
+
+        {loading ? (
+          <div className="text-center py-12 text-white/40 text-[13px] font-medium">Loading...</div>
+        ) : deployments.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-white/50 mb-2 text-[15px] font-medium">No deployments yet</p>
+            <p className="text-[13px] font-medium text-white/35">
+              Use the chat to trigger a deployment: &quot;Deploy to staging&quot;
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="bg-[#2A2A2C] rounded-2xl border border-white/5 shadow-sm overflow-hidden">
+              {deployments.map((d) => (
+                <div
+                  key={d.id}
+                  onClick={() => setSelectedId(selectedId === d.id ? null : d.id)}
+                  className="cursor-pointer"
+                >
+                  <DeploymentRow
+                    environment={d.environment}
+                    status={d.status}
+                    commitSha={d.commitSha}
+                    branch={d.branch}
+                    url={d.url}
+                    createdAt={d.createdAt}
+                    buildDuration={d.buildDuration}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {selected && (
+              <div>
+                <h3 className="text-[14px] font-semibold text-white/90 mb-3">Build Logs</h3>
+                <BuildLogViewer logs={selected.logs} />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

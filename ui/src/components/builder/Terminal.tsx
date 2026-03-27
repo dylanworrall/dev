@@ -19,16 +19,16 @@ export function Terminal({ onReady }: TerminalProps) {
 
     const terminal = new XTerm({
       theme: {
-        background: "#050507",
+        background: "#1C1C1E",
         foreground: "#F5F5F7",
-        cursor: "#F97316",
-        selectionBackground: "#F9731640",
-        black: "#050507",
-        red: "#EF4444",
-        green: "#22C55E",
-        yellow: "#F97316",
-        blue: "#3B82F6",
-        magenta: "#A855F7",
+        cursor: "#0A84FF",
+        selectionBackground: "#0A84FF40",
+        black: "#1C1C1E",
+        red: "#FF453A",
+        green: "#30D158",
+        yellow: "#FF9F0A",
+        blue: "#0A84FF",
+        magenta: "#BF5AF2",
         cyan: "#06B6D4",
         white: "#F5F5F7",
       },
@@ -46,7 +46,7 @@ export function Terminal({ onReady }: TerminalProps) {
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
-    terminal.writeln("\x1b[38;2;249;115;22m[dev]\x1b[0m WebContainer terminal ready");
+    terminal.writeln("\x1b[38;2;10;132;255m[dev]\x1b[0m WebContainer terminal ready");
     terminal.writeln("");
 
     onReady?.(terminal);
@@ -66,7 +66,7 @@ export function Terminal({ onReady }: TerminalProps) {
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-[#050507] p-2"
+      className="w-full h-full bg-[#1C1C1E] p-2"
     />
   );
 }

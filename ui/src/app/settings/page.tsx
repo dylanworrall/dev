@@ -1,379 +1,316 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   SettingsIcon,
-  SaveIcon,
-  KeyIcon,
-  ExternalLinkIcon,
   CheckCircleIcon,
-  XCircleIcon,
-  AlertCircleIcon,
-  LoaderIcon,
-  TerminalIcon,
+  LogOutIcon,
+  ExternalLinkIcon,
+  GithubIcon,
+  CloudIcon,
+  KeyIcon,
+  Loader2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { signOut, authClient, useSession } from "@/lib/auth-client";
+import { useRouter } from "next/navigation";
 
-interface Settings {
-  anthropicModel: string;
-  googleApiKey: string;
-  defaultCategories: string[];
-  crawlMaxPages: number;
-  crawlRateLimit: number;
-  respectRobotsTxt: boolean;
+const isCloudMode = !!authClient;
+
+interface ProviderState {
+  connected: boolean;
+  username?: string;
 }
-
-interface KeyStatus {
-  set: boolean;
-  masked: string;
-}
-
-interface KeyStates {
-  anthropic: KeyStatus;
-  google: KeyStatus;
-}
-
-type ValidationState = "idle" | "validating" | "valid" | "invalid";
 
 const tabs = [
+  { key: "integrations", label: "Integrations" },
+  { key: "deploy", label: "Deploy" },
   { key: "general", label: "General" },
-  { key: "git", label: "Git" },
-  { key: "cicd", label: "CI/CD" },
-  { key: "editor", label: "Editor" },
 ] as const;
 
 type TabKey = (typeof tabs)[number]["key"];
 
-interface ApiKeyFieldProps {
-  label: string;
-  provider: string;
-  status: KeyStatus;
-  dashboardUrl: string;
-  dashboardLabel: string;
-  placeholder: string;
-  description: string;
-  onSaved: () => void;
-}
-
-function ApiKeyField({
-  label,
-  provider,
-  status,
-  dashboardUrl,
-  dashboardLabel,
+function TokenInput({
+  value,
+  onChange,
+  onSubmit,
+  loading,
+  error,
   placeholder,
-  description,
-  onSaved,
-}: ApiKeyFieldProps) {
-  const [inputKey, setInputKey] = useState("");
-  const [validation, setValidation] = useState<ValidationState>("idle");
-  const [error, setError] = useState("");
-
-  const handleSaveKey = useCallback(async () => {
-    if (!inputKey.trim()) return;
-    setValidation("validating");
-    setError("");
-
-    try {
-      const resp = await fetch("/api/keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, key: inputKey.trim() }),
-      });
-      const data = await resp.json();
-
-      if (data.valid) {
-        setValidation("valid");
-        setInputKey("");
-        onSaved();
-      } else {
-        setValidation("invalid");
-        setError(data.error || "Invalid key");
-      }
-    } catch {
-      setValidation("invalid");
-      setError("Failed to validate key");
-    }
-  }, [inputKey, provider, onSaved]);
-
+  helpText,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+  loading: boolean;
+  error: string;
+  placeholder: string;
+  helpText: string;
+}) {
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          {label}
-        </h3>
-        <StatusIndicator set={status.set} validation={validation} />
-      </div>
-
-      {status.set && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 border border-border">
-          <span className="text-sm font-mono text-muted-foreground">{status.masked}</span>
-          <CheckCircleIcon className="size-4 text-green-400 ml-auto" />
-          <span className="text-xs text-green-400">Connected</span>
-        </div>
-      )}
-
-      <p className="text-xs text-muted-foreground">{description}</p>
-
-      <Button variant="outline" size="sm" onClick={() => window.open(dashboardUrl, "_blank")}>
-        <KeyIcon className="size-3.5" />
-        {dashboardLabel}
-        <ExternalLinkIcon className="size-3" />
-      </Button>
-
-      <div>
-        <label className="block text-xs text-muted-foreground mb-1">Or paste your key:</label>
-        <div className="flex gap-2">
+    <div className="mt-3 pt-3 border-t border-white/5 space-y-3">
+      <p className="text-[12px] font-medium text-white/35">{helpText}</p>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <KeyIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={14} />
           <input
             type="password"
-            value={inputKey}
-            onChange={(e) => {
-              setInputKey(e.target.value);
-              if (validation !== "idle") setValidation("idle");
-            }}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
             placeholder={placeholder}
-            className="flex-1 px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-accent/50 font-mono"
+            className="w-full bg-[#1C1C1E] rounded-lg pl-10 pr-3 py-2.5 text-[14px] font-medium text-white border border-white/5 focus:outline-none focus:border-[#0A84FF]/50 transition-colors placeholder:text-white/30 font-mono"
+            onKeyDown={(e) => e.key === "Enter" && onSubmit()}
           />
-          <Button size="sm" onClick={handleSaveKey} disabled={!inputKey.trim() || validation === "validating"}>
-            {validation === "validating" ? <LoaderIcon className="size-3.5 animate-spin" /> : <SaveIcon className="size-3.5" />}
-            Save
-          </Button>
         </div>
+        <button
+          onClick={onSubmit}
+          disabled={!value.trim() || loading}
+          className="px-4 py-2 bg-[#0A84FF] rounded-lg text-sm font-medium hover:bg-blue-500 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : "Connect"}
+        </button>
       </div>
-
-      {validation === "valid" && (
-        <div className="flex items-center gap-2 text-xs text-green-400">
-          <CheckCircleIcon className="size-3.5" /> Key validated and saved
-        </div>
-      )}
-      {validation === "invalid" && (
-        <div className="flex items-center gap-2 text-xs text-red-400">
-          <XCircleIcon className="size-3.5" /> {error}
-        </div>
-      )}
+      {error && <p className="text-[12px] font-medium text-[#FF453A]">{error}</p>}
     </div>
   );
 }
 
-function StatusIndicator({ set, validation }: { set: boolean; validation: ValidationState }) {
-  if (validation === "validating") {
-    return <span className="flex items-center gap-1 text-xs text-muted-foreground"><LoaderIcon className="size-3 animate-spin" /> Validating...</span>;
-  }
-  if (validation === "valid" || set) {
-    return <span className="flex items-center gap-1 text-xs text-green-400"><CheckCircleIcon className="size-3" /> Connected</span>;
-  }
-  if (validation === "invalid") {
-    return <span className="flex items-center gap-1 text-xs text-red-400"><XCircleIcon className="size-3" /> Invalid</span>;
-  }
-  return <span className="flex items-center gap-1 text-xs text-muted-foreground"><AlertCircleIcon className="size-3" /> Not set</span>;
+export default function SettingsPage() {
+  return <Suspense><SettingsInner /></Suspense>;
 }
 
-export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [keyStates, setKeyStates] = useState<KeyStates | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>("general");
+function SettingsInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { data: session } = useSession();
+  const [activeTab, setActiveTab] = useState<TabKey>("integrations");
+  const [toast, setToast] = useState("");
 
-  const loadKeyStates = useCallback(() => {
-    fetch("/api/keys").then((r) => r.json()).then(setKeyStates);
+  const [providers, setProviders] = useState<Record<string, ProviderState>>({
+    github: { connected: false },
+    flyio: { connected: false },
+  });
+
+  // Token inputs
+  const [flyToken, setFlyToken] = useState("");
+  const [flyLoading, setFlyLoading] = useState(false);
+  const [flyError, setFlyError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.integrations) {
+          setProviders({
+            github: { connected: !!data.integrations.github?.configured, username: data.integrations.github?.username },
+            flyio: { connected: !!data.integrations.flyio?.configured },
+          });
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
-    fetch("/api/settings").then((r) => r.json()).then(setSettings);
-    loadKeyStates();
-  }, [loadKeyStates]);
+    const connected = searchParams.get("connected");
+    if (connected) {
+      setToast(`${connected} connected successfully`);
+      setProviders((p) => ({ ...p, [connected]: { connected: true } }));
+      setTimeout(() => setToast(""), 3000);
+    }
+    const error = searchParams.get("error");
+    if (error) {
+      setToast(`Error: ${error}`);
+      setTimeout(() => setToast(""), 5000);
+    }
+  }, [searchParams]);
 
-  const handleSaveSettings = async () => {
-    if (!settings) return;
-    setSaving(true);
-    const resp = await fetch("/api/settings", {
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+
+  const handleDisconnect = async (id: string) => {
+    await fetch("/api/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings),
+      body: JSON.stringify({ integrations: { [id]: { configured: false, accessToken: null, apiToken: null } } }),
     });
-    const updated = await resp.json();
-    setSettings(updated);
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setProviders((p) => ({ ...p, [id]: { connected: false } }));
   };
 
-  if (!settings || !keyStates) {
-    return <div className="p-6 text-muted-foreground">Loading...</div>;
-  }
+  const connectToken = async (provider: string, endpoint: string, token: string, setLoading: (v: boolean) => void, setError: (v: string) => void, clearToken: () => void) => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error); return; }
+      setProviders((p) => ({ ...p, [provider]: { connected: true, username: data.username } }));
+      clearToken();
+      showToast(`${provider} connected`);
+    } catch { setError("Connection failed"); }
+    finally { setLoading(false); }
+  };
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-          <SettingsIcon className="size-5 text-accent" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Settings</h1>
-          <p className="text-sm text-muted-foreground">Configure the Dev Client</p>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 p-1 rounded-lg bg-surface-1 border border-border w-fit">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            className={cn(
-              "px-3 py-1.5 rounded-md text-sm transition-colors cursor-pointer",
-              activeTab === tab.key
-                ? "bg-accent/10 text-accent font-medium"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-6">
-        {activeTab === "general" && (
-          <>
-            <section className="rounded-xl border border-border bg-surface-1 p-4">
-              <ApiKeyField
-                label="Anthropic API Key"
-                provider="anthropic"
-                status={keyStates.anthropic}
-                dashboardUrl="https://platform.claude.com/settings/keys"
-                dashboardLabel="Get API Key"
-                placeholder="sk-ant-..."
-                description="Required for AI chat. Get your API key from the Anthropic Console."
-                onSaved={loadKeyStates}
-              />
-              <div className="mt-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-surface-2/50 border border-border/50">
-                <TerminalIcon className="size-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-muted-foreground">
-                  <span className="text-foreground font-medium">Claude Pro/Max users:</span> run{" "}
-                  <code className="px-1 py-0.5 rounded bg-surface-3 text-accent font-mono text-[11px]">claude setup-token</code>{" "}
-                  in your terminal to generate a token instead.
-                </p>
-              </div>
-            </section>
-
-            <section className="rounded-xl border border-border bg-surface-1 p-4">
-              <ApiKeyField
-                label="Google API Key"
-                provider="google"
-                status={keyStates.google}
-                dashboardUrl="https://console.cloud.google.com/apis/credentials"
-                dashboardLabel="Get API Key"
-                placeholder="AIza..."
-                description="Optional — for higher PageSpeed Insights rate limits."
-                onSaved={loadKeyStates}
-              />
-            </section>
-
-            <section className="rounded-xl border border-border bg-surface-1 p-4 space-y-3">
-              <h2 className="text-sm font-semibold text-foreground">AI Model</h2>
-              <input
-                type="text"
-                value={settings.anthropicModel}
-                onChange={(e) => setSettings({ ...settings, anthropicModel: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm text-foreground outline-none focus:ring-2 focus:ring-accent/50 font-mono"
-              />
-            </section>
-          </>
+    <div className="flex-1 overflow-y-auto scrollbar-hide px-8 py-10 text-white">
+      <div className="max-w-2xl mx-auto">
+        {toast && (
+          <div className="fixed top-14 right-4 z-50 px-4 py-2.5 rounded-2xl bg-[#1C1C1E]/95 backdrop-blur-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl text-[13px] font-medium text-white/90">
+            {toast}
+          </div>
         )}
 
-        {activeTab === "git" && (
-          <section className="rounded-xl border border-border bg-surface-1 p-4 space-y-4">
-            <h2 className="text-sm font-semibold text-foreground">Git Configuration</h2>
-            <p className="text-xs text-muted-foreground">
-              Git provider integration coming soon. Configure GitHub/GitLab tokens here.
-            </p>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Provider</label>
-              <select className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm text-foreground outline-none focus:ring-2 focus:ring-accent/50">
-                <option>GitHub</option>
-                <option>GitLab</option>
-                <option>Bitbucket</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Access Token</label>
-              <input
-                type="password"
-                placeholder="ghp_..."
-                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-accent/50 font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Organization</label>
-              <input
-                type="text"
-                placeholder="my-org"
-                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-accent/50"
-              />
-            </div>
-          </section>
-        )}
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#0A84FF]/10 text-[#0A84FF]">
+            <SettingsIcon size={18} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold mb-1">Settings</h1>
+            <p className="text-white/50 text-[13px] font-medium">Manage integrations and deploy config</p>
+          </div>
+        </div>
 
-        {activeTab === "cicd" && (
-          <>
-            <section className="rounded-xl border border-border bg-surface-1 p-4 space-y-4">
-              <h2 className="text-sm font-semibold text-foreground">Crawl Settings</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Max Pages</label>
-                  <input
-                    type="number"
-                    value={settings.crawlMaxPages}
-                    onChange={(e) => setSettings({ ...settings, crawlMaxPages: parseInt(e.target.value) || 50 })}
-                    className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm text-foreground outline-none focus:ring-2 focus:ring-accent/50"
-                  />
+        <div className="bg-[#2A2A2C] p-1 rounded-lg flex gap-1 w-fit mb-8 border border-white/[0.08]">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={cn(
+                "px-4 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer",
+                activeTab === tab.key ? "bg-[#3A3A3C] text-white shadow-sm" : "text-white/50 hover:text-white"
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="space-y-6">
+          {activeTab === "integrations" && (
+            <>
+              {isCloudMode && session && (
+                <div className="bg-[#2A2A2C] rounded-2xl p-5 border border-white/[0.08] shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[14px] font-semibold text-white/90">{session.user?.name || "User"}</p>
+                      <p className="text-[12px] font-medium text-white/40">{session.user?.email}</p>
+                    </div>
+                    <button onClick={() => { signOut(); router.replace("/login"); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-[#FF453A]/30 text-[#FF453A] hover:bg-[#FF453A]/10 transition-colors">
+                      <LogOutIcon size={14} className="inline mr-1.5" />Log Out
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1">Rate Limit (ms)</label>
-                  <input
-                    type="number"
-                    value={settings.crawlRateLimit}
-                    onChange={(e) => setSettings({ ...settings, crawlRateLimit: parseInt(e.target.value) || 1000 })}
-                    className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm text-foreground outline-none focus:ring-2 focus:ring-accent/50"
-                  />
+              )}
+
+              <h2 className="text-xs font-semibold text-white/40 tracking-wider uppercase mb-4">Integrations</h2>
+
+              {/* GitHub — OAuth flow */}
+              <div className="bg-[#2A2A2C] rounded-2xl p-5 border border-white/[0.08] shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/10 text-white"><GithubIcon size={18} /></div>
+                    <div>
+                      <h3 className="text-[14px] font-semibold text-white/90">GitHub</h3>
+                      <p className="text-[12px] font-medium text-white/40">Repos, issues, PRs, watcher agents</p>
+                    </div>
+                  </div>
+                  {providers.github.connected ? (
+                    <div className="flex items-center gap-2">
+                      <span className="flex items-center gap-1 text-[11px] font-medium text-[#30D158]"><CheckCircleIcon size={10} /> {providers.github.username || "Connected"}</span>
+                      <button onClick={() => handleDisconnect("github")} className="px-3 py-1.5 rounded-lg text-[12px] font-medium border border-white/5 text-white/40 hover:text-[#FF453A] hover:border-[#FF453A]/30 transition-colors">Disconnect</button>
+                    </div>
+                  ) : (
+                    <a href="/api/auth/github" className="px-4 py-2 bg-[#0A84FF] rounded-lg text-sm font-medium hover:bg-blue-500 transition-colors shadow-sm inline-block">Connect</a>
+                  )}
+                </div>
+                <div className="mt-3 pt-3 border-t border-white/5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {["repo", "workflow", "read:org", "read:user", "user:email"].map((s) => (
+                      <span key={s} className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-white/5 text-white/40">{s}</span>
+                    ))}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.respectRobotsTxt}
-                  onChange={(e) => setSettings({ ...settings, respectRobotsTxt: e.target.checked })}
-                  className="rounded accent-accent"
-                />
-                <label className="text-sm text-foreground">Respect robots.txt</label>
+
+              {/* Fly.io — Token paste */}
+              <div className="bg-[#2A2A2C] rounded-2xl p-5 border border-white/[0.08] shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#BF5AF2]/10 text-[#BF5AF2]"><CloudIcon size={18} /></div>
+                    <div>
+                      <h3 className="text-[14px] font-semibold text-white/90">Fly.io</h3>
+                      <p className="text-[12px] font-medium text-white/40">Deploy Docker apps to Fly Machines</p>
+                    </div>
+                  </div>
+                  {providers.flyio.connected && (
+                    <div className="flex items-center gap-2">
+                      <span className="flex items-center gap-1 text-[11px] font-medium text-[#30D158]"><CheckCircleIcon size={10} /> Connected</span>
+                      <button onClick={() => handleDisconnect("flyio")} className="px-3 py-1.5 rounded-lg text-[12px] font-medium border border-white/5 text-white/40 hover:text-[#FF453A] hover:border-[#FF453A]/30 transition-colors">Disconnect</button>
+                    </div>
+                  )}
+                </div>
+                {!providers.flyio.connected && (
+                  <TokenInput
+                    value={flyToken}
+                    onChange={(v) => { setFlyToken(v); setFlyError(""); }}
+                    onSubmit={() => connectToken("flyio", "/api/auth/flyio", flyToken, setFlyLoading, setFlyError, () => setFlyToken(""))}
+                    loading={flyLoading}
+                    error={flyError}
+                    placeholder="fo1_..."
+                    helpText="Run fly tokens create deploy to generate a token."
+                  />
+                )}
               </div>
-            </section>
+            </>
+          )}
 
-            <section className="rounded-xl border border-border bg-surface-1 p-4 space-y-4">
-              <h2 className="text-sm font-semibold text-foreground">Deploy Configuration</h2>
-              <p className="text-xs text-muted-foreground">
-                Configure deployment providers and build settings per space.
-              </p>
-            </section>
-          </>
-        )}
+          {activeTab === "deploy" && (
+            <>
+              <div className="bg-[#2A2A2C] rounded-2xl p-5 border border-white/[0.08] shadow-sm space-y-4">
+                <h2 className="text-[14px] font-semibold text-white/90">Default Deploy Target</h2>
+                <div className="flex gap-3">
+                  {[
+                    { name: "Fly.io", desc: "Docker & machines", connected: providers.flyio.connected },
+                  ].map((t) => (
+                    <button key={t.name} className="flex-1 p-4 rounded-xl border border-white/5 bg-[#1C1C1E] hover:border-[#0A84FF]/30 transition-colors text-center">
+                      <p className="text-[14px] font-medium text-white/90">{t.name}</p>
+                      <p className="text-[11px] text-white/35 mt-1">{t.desc}</p>
+                      {!t.connected && <p className="text-[10px] text-[#FF9F0A] mt-2">Not connected</p>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-[#2A2A2C] rounded-2xl p-5 border border-white/[0.08] shadow-sm space-y-3">
+                <h2 className="text-[14px] font-semibold text-white/90">Environment Variables</h2>
+                <p className="text-[12px] font-medium text-white/35">Variables injected into deployments.</p>
+                <div className="bg-[#1C1C1E] rounded-lg p-3 border border-white/5">
+                  <p className="text-[12px] font-medium text-white/30 font-mono">No variables configured</p>
+                </div>
+              </div>
+            </>
+          )}
 
-        {activeTab === "editor" && (
-          <section className="rounded-xl border border-border bg-surface-1 p-4 space-y-4">
-            <h2 className="text-sm font-semibold text-foreground">Editor Preferences</h2>
-            <p className="text-xs text-muted-foreground">
-              Editor preferences and code formatting options coming soon.
-            </p>
-          </section>
-        )}
-
-        <Button onClick={handleSaveSettings} disabled={saving}>
-          <SaveIcon className="size-4" />
-          {saved ? "Saved!" : saving ? "Saving..." : "Save Settings"}
-        </Button>
+          {activeTab === "general" && (
+            <>
+              <div className="bg-[#2A2A2C] rounded-2xl p-5 border border-white/[0.08] shadow-sm space-y-3">
+                <h2 className="text-[14px] font-semibold text-white/90">AI Agent</h2>
+                <select className="w-full bg-[#1C1C1E] rounded-lg px-3 py-2.5 text-[14px] font-medium text-white border border-white/5 focus:outline-none focus:border-[#0A84FF]/50 transition-colors">
+                  <option>Auto (best available)</option>
+                  <option>Claude Code</option>
+                  <option>Codex CLI</option>
+                </select>
+              </div>
+              <div className="bg-[#2A2A2C] rounded-2xl p-5 border border-white/[0.08] shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[14px] font-medium text-white/90">Dev Client</p>
+                    <p className="text-[12px] font-medium text-white/35">v2.3.0</p>
+                  </div>
+                  <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-white/40 hover:text-white transition-colors"><ExternalLinkIcon size={14} /></a>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

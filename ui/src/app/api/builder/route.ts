@@ -6,6 +6,7 @@ import type { AgentTask, AgentEvent } from "@/lib/agents/types";
 import { getWorkspaceRoot } from "@/lib/workspace";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
+import { SOSHI_DESIGN_SYSTEM } from "@/lib/soshi-design-system";
 
 /**
  * Write project files to disk so the agent (Claude Code/Codex) can modify them.
@@ -60,10 +61,12 @@ export async function POST(req: Request) {
     writeProjectToDisk(workDir, files);
   }
 
-  // Build the full prompt: user request + file context
-  const fullPrompt = fileContext
-    ? `${fileContext}\n\n## User Request\n\n${prompt}`
-    : prompt;
+  // Build the full prompt: design system + file context + user request
+  const fullPrompt = [
+    SOSHI_DESIGN_SYSTEM,
+    fileContext ? `## Current Project Files\n\n${fileContext}` : "",
+    `## User Request\n\n${prompt}`,
+  ].filter(Boolean).join("\n\n");
 
   const task: AgentTask = {
     id: nanoid(),

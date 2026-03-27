@@ -247,7 +247,7 @@ const AsciiAnimation = memo(({ category }: { category: string }) => {
   }, [frames.length]);
 
   return (
-    <pre className="text-[10px] leading-[1.2] text-accent/70 font-mono select-none">
+    <pre className="text-[10px] leading-[1.2] text-[#0A84FF]/70 font-mono select-none">
       {frames[frame]}
     </pre>
   );
@@ -287,11 +287,11 @@ export const ToolActivity = memo(({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
       className={cn(
-        "mb-3 rounded-lg border overflow-hidden",
-        isRunning && "border-accent/30 bg-accent/5",
-        isCompleted && "border-green-500/20 bg-green-500/5",
-        isError && "border-red-500/20 bg-red-500/5",
-        !isRunning && !isCompleted && !isError && "border-border bg-muted/30"
+        "mb-3 rounded-2xl border overflow-hidden shadow-sm",
+        isRunning && "border-[#0A84FF]/30 bg-[#0A84FF]/5",
+        isCompleted && "border-[#30D158]/20 bg-[#30D158]/5",
+        isError && "border-[#FF453A]/20 bg-[#FF453A]/5",
+        !isRunning && !isCompleted && !isError && "border-white/5 bg-[#2A2A2C]"
       )}
     >
       {/* Tool header with animation */}
@@ -311,9 +311,9 @@ export const ToolActivity = memo(({
         {!isRunning && (
           <div className={cn(
             "mt-1 flex-shrink-0 w-2 h-2 rounded-full",
-            isCompleted && "bg-green-500",
-            isError && "bg-red-500",
-            !isCompleted && !isError && "bg-muted-foreground/50"
+            isCompleted && "bg-[#30D158]",
+            isError && "bg-[#FF453A]",
+            !isCompleted && !isError && "bg-white/20"
           )} />
         )}
 
@@ -321,10 +321,10 @@ export const ToolActivity = memo(({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className={cn(
-              "text-sm font-medium",
-              isRunning && "text-accent",
-              isCompleted && "text-green-400",
-              isError && "text-red-400",
+              "text-[13px] font-medium",
+              isRunning && "text-[#0A84FF]",
+              isCompleted && "text-[#30D158]",
+              isError && "text-[#FF453A]",
             )}>
               {description}
               {isRunning && (
@@ -341,7 +341,7 @@ export const ToolActivity = memo(({
 
           {/* Input summary — short contextual info */}
           {inputSummary && (
-            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+            <p className="text-[11px] text-white/40 mt-0.5 truncate">
               {inputSummary}
             </p>
           )}
@@ -352,7 +352,7 @@ export const ToolActivity = memo(({
               <motion.p
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
-                className="text-xs text-muted-foreground mt-1"
+                className="text-[11px] text-white/40 mt-1"
               >
                 {summary}
               </motion.p>
@@ -361,7 +361,7 @@ export const ToolActivity = memo(({
               <motion.p
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
-                className="text-xs text-red-400 mt-1"
+                className="text-[11px] text-[#FF453A] mt-1"
               >
                 {errorText}
               </motion.p>

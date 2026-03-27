@@ -1,62 +1,49 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { Sidebar } from "./Sidebar";
-import { MainContent } from "./MainContent";
-import { SidebarProvider } from "@/contexts/SidebarContext";
+import { usePathname } from "next/navigation";
+import { TopBar } from "./TopBar";
 import { ThreadProvider } from "@/contexts/ThreadContext";
 import { ToastProvider } from "@/contexts/ToastContext";
-import { SpaceProvider } from "@/contexts/SpaceContext";
 import { ToastContainer } from "@/components/Toast";
 import { useSession, authClient } from "@/lib/auth-client";
 
-const hasAuth = !!authClient;
-
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const { data: session, isPending } = useSession();
   const isLogin = pathname === "/login";
   const isBuilder = pathname.startsWith("/builder");
 
-  useEffect(() => {
-    if (hasAuth && !isPending && !session && !isLogin && !isBuilder) {
-      router.replace("/login");
-    }
-  }, [isPending, session, isLogin, isBuilder, router]);
-
-  // Builder and login bypass auth — builder uses COOP/COEP headers that break auth
-  if (isLogin || isBuilder) {
+  // Login bypasses everything
+  if (isLogin) {
     return <>{children}</>;
   }
 
-  // Skip session gate when auth is not configured (local mode)
-  if (hasAuth) {
-    if (isPending) {
-      return (
-        <div className="min-h-screen bg-surface-0 flex items-center justify-center">
-          <div className="size-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-        </div>
-      );
-    }
-
-    if (!session) {
-      return null;
-    }
+  // Builder gets TopBar integrated into its own layout
+  if (isBuilder) {
+    return (
+      <ToastProvider>
+        <ThreadProvider>
+          <div className="h-screen flex flex-col bg-[#1C1C1E]">
+            <TopBar />
+            <div className="flex-1 min-h-0">
+              {children}
+            </div>
+          </div>
+          <ToastContainer />
+        </ThreadProvider>
+      </ToastProvider>
+    );
   }
 
+  // All other pages: TopBar + content
   return (
     <ToastProvider>
-      <SidebarProvider>
-        <SpaceProvider>
-          <ThreadProvider>
-            <Sidebar />
-            <MainContent>{children}</MainContent>
-            <ToastContainer />
-          </ThreadProvider>
-        </SpaceProvider>
-      </SidebarProvider>
+      <ThreadProvider>
+        <div className="min-h-screen bg-[#1C1C1E]">
+          <TopBar />
+          <main>{children}</main>
+        </div>
+        <ToastContainer />
+      </ThreadProvider>
     </ToastProvider>
   );
 }

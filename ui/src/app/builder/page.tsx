@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -30,7 +30,6 @@ import {
   FolderTree,
   TerminalSquare,
   Bot,
-  Zap,
 } from "lucide-react";
 
 type RightTab = "preview" | "files" | "terminal";
@@ -108,9 +107,6 @@ export default function BuilderPage() {
     }
   }, [wc]);
 
-  // Send prompt to /api/builder, stream SSE events
-  // Auto-scaffolds on first prompt if not already bootstrapped.
-  // Reads current WebContainer files and sends them as context.
   const handleSend = useCallback(async (text: string) => {
     if (!text.trim() || running || !wc) return;
     setRunning(true);
@@ -118,7 +114,6 @@ export default function BuilderPage() {
     pushEvent({ type: "task.progress", taskId: "user", message: `> ${text}` });
 
     try {
-      // Auto-scaffold if this is the first prompt
       if (!bootstrapped) {
         pushEvent({ type: "task.progress", taskId: "scaffold", message: "Scaffolding project first..." });
         await bootstrapProject(wc, {
@@ -131,12 +126,10 @@ export default function BuilderPage() {
         pushEvent({ type: "task.progress", taskId: "scaffold", message: "Project ready, sending to agent..." });
       }
 
-      // Read current project files for context
       pushEvent({ type: "task.progress", taskId: "context", message: "Reading project files..." });
       const projectFiles = await readProjectFiles(wc);
       const fileContext = formatFilesAsContext(projectFiles);
 
-      // Send prompt + file context to agent
       const res = await fetch("/api/builder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -159,7 +152,6 @@ export default function BuilderPage() {
         return;
       }
 
-      // Parse SSE stream
       const reader = res.body?.getReader();
       if (!reader) return;
 
@@ -183,25 +175,28 @@ export default function BuilderPage() {
             const event: AgentEvent = JSON.parse(data);
             pushEvent(event);
 
-            // Track active agent
             if (event.type === "task.accepted") {
               setActiveAgent(event.agent);
             }
 
-            // Sync file changes to WebContainer
             await syncToWC(event);
 
-            // Write terminal output for commands
             if (event.type === "command.started") {
-              termRef.current?.writeln(`\x1b[38;2;249;115;22m$\x1b[0m ${event.command}`);
+              termRef.current?.writeln(`\x1b[38;2;10;132;255m$\x1b[0m ${event.command}`);
             }
             if (event.type === "command.output") {
               termRef.current?.write(event.output);
             }
 
-            // Clear active agent on completion
             if (event.type === "task.completed" || event.type === "task.failed") {
               setActiveAgent(null);
+              // Auto-refresh preview after agent finishes
+              if (event.type === "task.completed") {
+                setTimeout(() => {
+                  const iframe = document.getElementById("wc-preview") as HTMLIFrameElement;
+                  if (iframe?.src) iframe.src = iframe.src;
+                }, 500);
+              }
             }
           } catch {
             // Skip malformed JSON
@@ -221,7 +216,6 @@ export default function BuilderPage() {
     }
   }, [running, wc, agentChoice, bootstrapped, pushEvent, syncToWC]);
 
-  // Bootstrap project in WebContainer using the template system
   const handleScaffold = useCallback(async () => {
     if (!wc || running || bootstrapped) return;
     setRunning(true);
@@ -270,13 +264,6 @@ export default function BuilderPage() {
     }
   }, [wc, running, bootstrapped, pushEvent]);
 
-  const tabClass = (tab: RightTab) =>
-    `px-3 py-1.5 text-xs font-medium transition-colors ${
-      rightTab === tab
-        ? "text-accent border-b-2 border-accent"
-        : "text-muted-foreground hover:text-foreground"
-    }`;
-
   if (showOnboarding) {
     return (
       <Onboarding
@@ -289,102 +276,86 @@ export default function BuilderPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#050507] p-2 gap-2">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 h-11 rounded-xl bg-zinc-900/60 border border-zinc-800/60 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-accent/15 flex items-center justify-center">
-            <Zap className="size-3.5 text-accent" />
-          </div>
-          <span className="text-sm font-semibold text-foreground">Builder</span>
-        </div>
-
-        <div className="flex-1" />
-
-        {/* Active agent */}
+    <div className="h-full flex flex-col p-2 gap-2">
+      {/* Status bar */}
+      <div className="flex items-center justify-end gap-3 px-3 h-7 flex-shrink-0">
         {activeAgent && (
-          <div className="flex items-center gap-1.5 text-xs text-accent">
-            <Bot className="size-3.5 animate-pulse" />
+          <div className="flex items-center gap-1.5 text-[12px] font-medium text-[#0A84FF]">
+            <Bot size={12} className="animate-pulse" />
             {activeAgent}
           </div>
         )}
-
-        {/* Status */}
         {booting && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
+          <div className="flex items-center gap-1.5 text-[11px] text-white/40">
+            <Loader2 size={12} className="animate-spin" />
             Booting...
           </div>
         )}
         {wc && !booting && !running && (
-          <div className="flex items-center gap-1.5 text-xs text-emerald-400">
-            <div className="size-1.5 rounded-full bg-emerald-400" />
+          <div className="flex items-center gap-1.5 text-[11px] text-[#30D158]">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#30D158]" />
             Ready
           </div>
         )}
       </div>
 
-      {/* Main content — resizable panels, each with rounded inner container */}
+      {/* Main content — resizable panels */}
       <div className="flex-1 min-h-0">
         <ResizablePanelGroup orientation="horizontal" className="h-full">
           {/* Left: Chat */}
-          <ResizablePanel defaultSize={32} minSize={22} maxSize={50}>
-            <div className="h-full pr-1">
-              <div className="h-full rounded-xl bg-zinc-900/40 border border-zinc-800/60 overflow-hidden">
-                <BuilderChat
-                  events={events}
-                  onSend={handleSend}
-                  running={running}
-                  activeAgent={activeAgent}
-                  agentChoice={agentChoice}
-                  onAgentChoiceChange={(c) => setAgentChoice(c as AgentChoice)}
-                />
-              </div>
+          <ResizablePanel defaultSize="35%" minSize="20%" maxSize="55%">
+            <div className="h-full mr-1 rounded-2xl bg-[#2A2A2C] border border-white/5 shadow-sm overflow-hidden">
+              <BuilderChat
+                events={events}
+                onSend={handleSend}
+                running={running}
+                activeAgent={activeAgent}
+                agentChoice={agentChoice}
+                onAgentChoiceChange={(c) => setAgentChoice(c as AgentChoice)}
+              />
             </div>
           </ResizablePanel>
 
           <ResizableHandle withHandle />
 
           {/* Right: Preview + Terminal */}
-          <ResizablePanel defaultSize={68} minSize={40}>
-            <div className="h-full pl-1">
+          <ResizablePanel defaultSize="65%" minSize="30%">
+            <div className="h-full ml-1">
               <ResizablePanelGroup orientation="vertical" className="h-full">
                 {/* Preview / Files */}
-                <ResizablePanel defaultSize={72} minSize={30}>
-                  <div className="h-full pb-1">
-                    <div className="h-full rounded-xl bg-zinc-900/40 border border-zinc-800/60 overflow-hidden flex flex-col">
-                      {/* Tabs */}
-                      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-zinc-800/40 flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setRightTab("preview")}
-                          className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
-                            rightTab === "preview"
-                              ? "bg-zinc-800/80 text-foreground"
-                              : "text-muted-foreground hover:text-foreground hover:bg-zinc-800/40"
-                          }`}
-                        >
-                          <MonitorSmartphone className="size-3.5" />
-                          Preview
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setRightTab("files")}
-                          className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
-                            rightTab === "files"
-                              ? "bg-zinc-800/80 text-foreground"
-                              : "text-muted-foreground hover:text-foreground hover:bg-zinc-800/40"
-                          }`}
-                        >
-                          <FolderTree className="size-3.5" />
-                          Files
-                        </button>
-                      </div>
+                <ResizablePanel defaultSize="72%" minSize="25%">
+                  <div className="h-full mb-1 rounded-2xl bg-[#2A2A2C] border border-white/5 shadow-sm overflow-hidden flex flex-col">
+                    {/* Tabs */}
+                    <div className="flex items-center gap-1 px-3 py-1.5 border-b border-white/5 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setRightTab("preview")}
+                        className={`flex items-center gap-1.5 px-3 py-1 text-[12px] font-medium rounded-md transition-colors ${
+                          rightTab === "preview"
+                            ? "bg-[#3A3A3C] text-white shadow-sm"
+                            : "text-white/40 hover:text-white hover:bg-[#3A3A3C]"
+                        }`}
+                      >
+                        <MonitorSmartphone size={12} />
+                        Preview
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRightTab("files")}
+                        className={`flex items-center gap-1.5 px-3 py-1 text-[12px] font-medium rounded-md transition-colors ${
+                          rightTab === "files"
+                            ? "bg-[#3A3A3C] text-white shadow-sm"
+                            : "text-white/40 hover:text-white hover:bg-[#3A3A3C]"
+                        }`}
+                      >
+                        <FolderTree size={12} />
+                        Files
+                      </button>
+                    </div>
 
-                      <div className="flex-1 overflow-hidden">
-                        {rightTab === "preview" && <Preview url={previewUrl} />}
-                        {rightTab === "files" && <FileExplorer wc={wc} />}
-                      </div>
+                    <div className="flex-1 overflow-hidden">
+                      {rightTab === "preview" && <Preview url={previewUrl} />}
+                      {rightTab === "files" && <FileExplorer wc={wc} />}
                     </div>
                   </div>
                 </ResizablePanel>
@@ -392,18 +363,16 @@ export default function BuilderPage() {
                 <ResizableHandle withHandle />
 
                 {/* Terminal */}
-                <ResizablePanel defaultSize={28} minSize={12}>
-                  <div className="h-full pt-1">
-                    <div className="h-full rounded-xl bg-zinc-900/40 border border-zinc-800/60 overflow-hidden flex flex-col">
-                      <div className="flex items-center px-3 py-1.5 border-b border-zinc-800/40 flex-shrink-0">
-                        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                          <TerminalSquare className="size-3.5" />
-                          Terminal
-                        </span>
-                      </div>
-                      <div className="flex-1 overflow-hidden">
-                        <Terminal onReady={(t) => { termRef.current = t; }} />
-                      </div>
+                <ResizablePanel defaultSize="28%" minSize="10%">
+                  <div className="h-full mt-1 rounded-2xl bg-[#2A2A2C] border border-white/5 shadow-sm overflow-hidden flex flex-col">
+                    <div className="flex items-center px-3 py-1.5 border-b border-white/5 flex-shrink-0">
+                      <span className="flex items-center gap-1.5 text-[12px] font-medium text-white/40">
+                        <TerminalSquare size={12} />
+                        Terminal
+                      </span>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <Terminal onReady={(t) => { termRef.current = t; }} />
                     </div>
                   </div>
                 </ResizablePanel>

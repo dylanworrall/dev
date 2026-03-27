@@ -9,39 +9,41 @@ interface PreviewProps {
 export function Preview({ url }: PreviewProps) {
   if (!url) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-surface-0 text-muted-foreground">
-        <Globe className="size-10 opacity-30" />
-        <p className="text-sm">No preview available yet</p>
-        <p className="text-xs opacity-60">Run a dev server to see the preview here</p>
+      <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-[#1C1C1E] text-white/40">
+        <Globe size={40} className="text-white/20" />
+        <p className="text-[13px] font-medium text-white/50">No preview available yet</p>
+        <p className="text-[12px] font-medium text-white/30">Run a dev server to see the preview here</p>
       </div>
     );
   }
 
+  const refresh = () => {
+    const iframe = document.getElementById("wc-preview") as HTMLIFrameElement;
+    if (iframe) iframe.src = url;
+  };
+
   return (
-    <div className="w-full h-full flex flex-col bg-surface-0">
+    <div className="w-full h-full flex flex-col bg-[#1C1C1E]">
       {/* URL bar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-surface-1">
-        <Globe className="size-3.5 text-muted-foreground flex-shrink-0" />
-        <span className="text-xs text-muted-foreground truncate flex-1 font-mono">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/5 bg-[#2A2A2C]">
+        <Globe size={12} className="text-white/40 flex-shrink-0" />
+        <span className="text-[11px] text-white/40 truncate flex-1 font-mono">
           {url}
         </span>
         <button
           type="button"
-          onClick={() => {
-            const iframe = document.getElementById("wc-preview") as HTMLIFrameElement;
-            if (iframe) iframe.src = url;
-          }}
-          className="p-1 hover:bg-surface-2 rounded text-muted-foreground hover:text-foreground transition-colors"
+          onClick={refresh}
+          className="p-1 hover:bg-[#3A3A3C] rounded-md text-white/40 hover:text-white transition-colors"
         >
-          <RefreshCw className="size-3" />
+          <RefreshCw size={12} />
         </button>
         <a
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="p-1 hover:bg-surface-2 rounded text-muted-foreground hover:text-foreground transition-colors"
+          className="p-1 hover:bg-[#3A3A3C] rounded-md text-white/40 hover:text-white transition-colors"
         >
-          <ExternalLink className="size-3" />
+          <ExternalLink size={12} />
         </a>
       </div>
 
@@ -50,7 +52,7 @@ export function Preview({ url }: PreviewProps) {
         id="wc-preview"
         src={url}
         title="Preview"
-        className="flex-1 w-full border-0 bg-white"
+        className="flex-1 w-full border-0"
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
       />
     </div>

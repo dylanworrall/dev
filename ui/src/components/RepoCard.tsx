@@ -30,32 +30,32 @@ export function RepoCard({ name, fullName, language, description, stars, lastPus
   const langColor = languageColors[language.toLowerCase()] || "#8E8E93";
 
   return (
-    <div className="rounded-xl border border-border bg-surface-1 p-4 hover:border-accent/30 transition-colors">
+    <div className="group bg-[#2A2A2C] rounded-2xl p-5 border border-white/5 shadow-sm hover:bg-[#3A3A3C] transition-colors cursor-pointer">
       <div className="flex items-start justify-between mb-2">
         <div>
-          <h3 className="text-sm font-semibold text-accent hover:underline cursor-pointer">{fullName}</h3>
+          <h3 className="text-[14px] font-semibold text-[#0A84FF] hover:underline">{fullName}</h3>
           {description && (
-            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{description}</p>
+            <p className="text-[12px] font-medium text-white/40 mt-1 line-clamp-2">{description}</p>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+      <div className="flex items-center gap-4 mt-3 text-[12px] font-medium text-white/40">
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: langColor }} />
           {language}
         </span>
         {stars > 0 && (
           <span className="flex items-center gap-1">
-            <StarIcon className="size-3" />
+            <StarIcon size={10} />
             {stars.toLocaleString()}
           </span>
         )}
         <span className="flex items-center gap-1">
-          <GitBranchIcon className="size-3" />
+          <GitBranchIcon size={10} />
           {defaultBranch}
         </span>
-        <span className="ml-auto">
+        <span className="ml-auto text-white/30">
           Updated {new Date(lastPush).toLocaleDateString()}
         </span>
       </div>
